@@ -17,6 +17,7 @@ const TEST_ORIGIN = 'https://desktop-updates.example.com'
 const TEST_BUCKET = 'test-download-bucket-1250000000'
 const RELEASE_ID = '0123456789abcdef0123456789abcdef'
 const PRODUCTION_BUCKET = 'production-download-bucket-1250000000'
+const PRODUCTION_ORIGIN = 'https://download.g1brain.example.com'
 const require = createRequire(import.meta.url)
 const { createBlockmap } = require('app-builder-lib/out/targets/differentialUpdateInfoBuilder.js') as {
   createBlockmap: (file: string, target: object, packager: { info: { emitArtifactBuildCompleted(event: object): Promise<void> } },
@@ -49,16 +50,16 @@ async function fixture(
   await writeFile(join(appRoot, 'package.json'), `${JSON.stringify({ version })}\n`)
 
   const [os, arch] = target.split('-') as ['mac' | 'win', 'arm64' | 'x64']
-  const base = `deepseek-harness-${version}-${os}-${arch}`
+  const base = `g1brainxdeepseek-${version}-${os}-${arch}`
   const origin = environment === 'test'
     ? TEST_ORIGIN
-    : 'https://download.deepseek.com'
+    : PRODUCTION_ORIGIN
   await writeFile(join(artifactsRoot, `${target}-release.json`), `${JSON.stringify({
     schemaVersion: 1,
     target,
     version,
     environment,
-    publicUrl: `${origin}/dsh-desk/${environment === 'test' ? `${RELEASE_ID}/` : ''}feeds/${target}/`,
+    publicUrl: `${origin}/g1brainxdeepseek-desk/${environment === 'test' ? `${RELEASE_ID}/` : ''}feeds/${target}/`,
   })}\n`)
 
   if (os === 'mac') {
@@ -100,6 +101,7 @@ async function fixture(
       }
       : {
         DSH_DESKTOP_AUTO_UPDATE_ENV: 'production',
+        G1BRAIN_DESKTOP_UPDATE_ORIGIN: PRODUCTION_ORIGIN,
         DOWNLOAD_PROD_COS_BUCKET: PRODUCTION_BUCKET,
       },
   }
@@ -151,8 +153,8 @@ describe('desktop upload plan', () => {
     expect(plan.version).toBe('1.2.3-alpha.4')
     expect(plan.artifacts).toHaveLength(1)
     expect(plan.artifacts[0]).toMatchObject({
-      path: join(paths.artifactsRoot, 'deepseek-harness-1.2.3-alpha.4-win-x64.exe'),
-      key: 'desktop/dsh-latest-windows-x64.exe', channelMetadata: false,
+      path: join(paths.artifactsRoot, 'g1brainxdeepseek-1.2.3-alpha.4-win-x64.exe'),
+      key: 'g1brainxdeepseek/g1brainxdeepseek-latest-windows-x64.exe', channelMetadata: false,
     })
   })
 
@@ -164,7 +166,7 @@ describe('desktop upload plan', () => {
       DOWNLOAD_TEST_RELEASE_ID: RELEASE_ID, DOWNLOAD_TEST_COS_BUCKET: TEST_BUCKET,
     })
     if (failure === 'checksum') {
-      const path = join(paths.artifactsRoot, 'deepseek-harness-1.2.3-win-x64.exe')
+      const path = join(paths.artifactsRoot, 'g1brainxdeepseek-1.2.3-win-x64.exe')
       await writeFile(path, Buffer.alloc((await readFile(path)).length))
     }
     await expect(createDesktopUploadPlan('win-x64', { ...paths, latest: true }))
@@ -175,15 +177,15 @@ describe('desktop upload plan', () => {
     const paths = await fixture('win-x64', '1.2.3', 'production')
     const plan = await createDesktopUploadPlan('win-x64', paths)
     expect(plan.artifacts.map(artifact => artifact.key)).toEqual([
-      'dsh-desk/bin/win-x64/deepseek-harness-1.2.3-win-x64.exe',
-      'dsh-desk/bin/win-x64/deepseek-harness-1.2.3-win-x64.exe.blockmap',
-      'dsh-desk/feeds/win-x64/nightly.yml',
-      'dsh-desk/feeds/win-x64/latest.yml',
+      'g1brainxdeepseek-desk/bin/win-x64/g1brainxdeepseek-1.2.3-win-x64.exe',
+      'g1brainxdeepseek-desk/bin/win-x64/g1brainxdeepseek-1.2.3-win-x64.exe.blockmap',
+      'g1brainxdeepseek-desk/feeds/win-x64/nightly.yml',
+      'g1brainxdeepseek-desk/feeds/win-x64/latest.yml',
     ])
     expect(load(plan.artifacts[2]!.contents!)).toMatchObject({
       version: '1.2.3',
       files: [{
-        url: 'https://download.deepseek.com/dsh-desk/bin/win-x64/deepseek-harness-1.2.3-win-x64.exe',
+        url: 'https://download.g1brain.example.com/g1brainxdeepseek-desk/bin/win-x64/g1brainxdeepseek-1.2.3-win-x64.exe',
         sha512: digest('signed NSIS executable fixture'),
       }],
     })
@@ -197,13 +199,13 @@ describe('desktop upload plan', () => {
     expect(plan).toMatchObject({
       environment: 'test',
       version: '1.2.3',
-      publicUrl: `https://desktop-updates.example.com/dsh-desk/${RELEASE_ID}/feeds/mac-arm64/`,
+      publicUrl: `https://desktop-updates.example.com/g1brainxdeepseek-desk/${RELEASE_ID}/feeds/mac-arm64/`,
       bucket: TEST_BUCKET,
     })
     expect(plan.artifacts.map(artifact => artifact.filename)).toEqual([
-      'deepseek-harness-1.2.3-mac-arm64.dmg',
-      'deepseek-harness-1.2.3-mac-arm64.zip',
-      'deepseek-harness-1.2.3-mac-arm64.zip.blockmap',
+      'g1brainxdeepseek-1.2.3-mac-arm64.dmg',
+      'g1brainxdeepseek-1.2.3-mac-arm64.zip',
+      'g1brainxdeepseek-1.2.3-mac-arm64.zip.blockmap',
       'nightly-mac.yml',
       'latest-mac.yml',
     ])
@@ -215,7 +217,7 @@ describe('desktop upload plan', () => {
   it.each(['mac-arm64', 'mac-x64', 'win-x64'] as const)('publishes every %s object and YAML reference inside the test release directory', async (target) => {
     const paths = await fixture(target)
     const plan = await createDesktopUploadPlan(target, paths)
-    const prefix = `dsh-desk/${RELEASE_ID}`
+    const prefix = `g1brainxdeepseek-desk/${RELEASE_ID}`
     const payload = plan.artifacts.find(artifact => artifact.filename.endsWith(target === 'win-x64' ? '.exe' : '.zip'))!
     for (const artifact of plan.artifacts) {
       expect(artifact.key).toBe(`${prefix}/${artifact.channelMetadata ? 'feeds' : 'bin'}/${target}/${artifact.filename}`)
@@ -244,9 +246,9 @@ describe('desktop upload plan', () => {
     const paths = await fixture('mac-arm64', '1.2.3-alpha.4')
     const plan = await createDesktopUploadPlan('mac-arm64', paths)
     expect(plan.artifacts.map(artifact => artifact.filename)).toEqual([
-      'deepseek-harness-1.2.3-alpha.4-mac-arm64.dmg',
-      'deepseek-harness-1.2.3-alpha.4-mac-arm64.zip',
-      'deepseek-harness-1.2.3-alpha.4-mac-arm64.zip.blockmap',
+      'g1brainxdeepseek-1.2.3-alpha.4-mac-arm64.dmg',
+      'g1brainxdeepseek-1.2.3-alpha.4-mac-arm64.zip',
+      'g1brainxdeepseek-1.2.3-alpha.4-mac-arm64.zip.blockmap',
       'nightly-mac.yml',
     ])
   })
@@ -255,20 +257,20 @@ describe('desktop upload plan', () => {
     const paths = await fixture('win-x64', '2.0.0', 'production')
     const plan = await createDesktopUploadPlan('win-x64', paths)
     expect(plan.artifacts.map(artifact => artifact.filename)).toEqual([
-      'deepseek-harness-2.0.0-win-x64.exe',
-      'deepseek-harness-2.0.0-win-x64.exe.blockmap',
+      'g1brainxdeepseek-2.0.0-win-x64.exe',
+      'g1brainxdeepseek-2.0.0-win-x64.exe.blockmap',
       'nightly.yml',
       'latest.yml',
     ])
     expect(plan).toMatchObject({
-      publicUrl: 'https://download.deepseek.com/dsh-desk/feeds/win-x64/',
+      publicUrl: 'https://download.g1brain.example.com/g1brainxdeepseek-desk/feeds/win-x64/',
       bucket: PRODUCTION_BUCKET,
     })
   })
 
   it.each(['missing', 'empty'])('rejects a %s Windows blockmap before publishing its feed', async (condition) => {
     const paths = await fixture('win-x64')
-    const path = join(paths.artifactsRoot, 'deepseek-harness-1.2.3-win-x64.exe.blockmap')
+    const path = join(paths.artifactsRoot, 'g1brainxdeepseek-1.2.3-win-x64.exe.blockmap')
     if (condition === 'missing') await rm(path)
     else await writeFile(path, '')
     await expect(createDesktopUploadPlan('win-x64', paths)).rejects.toThrow(/missing or empty artifact.*\.exe\.blockmap/u)
@@ -295,7 +297,7 @@ describe('desktop upload plan', () => {
   it('rejects stale architecture metadata and modified updater bytes', async () => {
     const paths = await fixture('mac-arm64')
     const metadataPath = join(paths.artifactsRoot, 'nightly-mac.yml')
-    const zipPath = join(paths.artifactsRoot, 'deepseek-harness-1.2.3-mac-arm64.zip')
+    const zipPath = join(paths.artifactsRoot, 'g1brainxdeepseek-1.2.3-mac-arm64.zip')
     await writeFile(zipPath, 'modified')
     await expect(createDesktopUploadPlan('mac-arm64', paths)).rejects.toThrow(/size.*metadata/u)
 
@@ -303,7 +305,7 @@ describe('desktop upload plan', () => {
     await writeFile(metadataPath, `${JSON.stringify({
       version: '1.2.3',
       files: [{
-        url: 'deepseek-harness-1.2.3-mac-x64.zip',
+        url: 'g1brainxdeepseek-1.2.3-mac-x64.zip',
         size: Buffer.byteLength(x64),
         sha512: digest(x64),
       }],

@@ -1,6 +1,7 @@
-DeepSeek Harness
-DeepSeek Harness
-Welcome to DeepSeek Harness
-Build potential. Explore intelligence.
-Sign in
-Add API Key
+G1brain × DeepSeek
+Sign in to G1brain
+Use your G1brain username and password to enter the workspace.
+Username
+Password
+Enter workspace
+Development mode: your password is not verified by G1brain.

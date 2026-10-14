@@ -1,6 +1,7 @@
-DeepSeek Harness
-DeepSeek Harness
-欢迎使用 DeepSeek Harness
-组装无限可能，共探智能上限
-登录
-添加 API Key
+G1brain × DeepSeek
+登录 G1brain 账号
+使用 G1brain 用户名和密码进入工作台。
+用户名
+密码
+进入工作台
+开发模式：当前不会向 G1brain 服务端校验密码。

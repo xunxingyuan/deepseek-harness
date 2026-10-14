@@ -1,0 +1,61 @@
+import { describe, expect, it, vi } from 'vitest'
+import { DEFAULT_G1BRAIN_DEV_BASE_URL, G1brainAuth, g1brainDevelopmentHostEnvironment } from '../src/g1brain-auth.ts'
+
+describe('G1brain desktop login', () => {
+  it('connects the unpackaged development Host with the existing G1brain development API identity', () => {
+    expect(g1brainDevelopmentHostEnvironment({}, true, 'local-dev')).toEqual({
+      G1BRAIN_BASE_URL: DEFAULT_G1BRAIN_DEV_BASE_URL,
+      G1BRAIN_LOCAL_USER_ID: 'developer',
+      G1BRAIN_LOCAL_CLIENT_ID: 'g1brain-web',
+      G1BRAIN_ALLOW_LOCAL_DEV: '1',
+      G1BRAIN_ALLOW_DEV_WRITES: '1',
+    })
+    expect(g1brainDevelopmentHostEnvironment({ G1BRAIN_BASE_URL: 'http://127.0.0.1:9000' }, true, 'local-dev').G1BRAIN_BASE_URL)
+      .toBe('http://127.0.0.1:9000')
+    expect(g1brainDevelopmentHostEnvironment({}, false, 'local-dev')).toEqual({})
+    expect(g1brainDevelopmentHostEnvironment({}, true, 'oauth')).toEqual({})
+  })
+  it('opens a development session without transmitting or retaining the password', async () => {
+    const send = vi.fn<typeof fetch>()
+    const auth = new G1brainAuth(() => ({}), send)
+    expect(auth.signedIn).toBe(false)
+    expect(await auth.login(' admin ', 'test-password')).toEqual({ ok: true, username: 'admin' })
+    expect(auth.signedIn).toBe(true)
+    expect(send).not.toHaveBeenCalled()
+    expect(Object.values(auth)).not.toContain('test-password')
+  })
+
+  it('requires both fields before accepting a development login', async () => {
+    const auth = new G1brainAuth(() => ({}))
+    expect(await auth.login('', 'password')).toEqual({ ok: false, reason: 'invalid-credentials' })
+    expect(await auth.login('admin', '')).toEqual({ ok: false, reason: 'invalid-credentials' })
+    expect(auth.signedIn).toBe(false)
+  })
+
+  it('uses the G1brain OAuth exchange only when that mode is explicitly configured', async () => {
+    const send = vi.fn<typeof fetch>(async () => new Response(JSON.stringify({ data: { access_token: 'server-token', expires_in: 3600 } }), { status: 200 }))
+    const auth = new G1brainAuth(() => ({ G1BRAIN_AUTH_MODE: 'oauth', G1BRAIN_CLIENT_SECRET: 'fixture-secret' }), send)
+    expect(await auth.login('alice', 'fixture-password')).toEqual({ ok: true, username: 'alice' })
+    expect(auth.signedIn).toBe(true)
+    const [url, init] = send.mock.calls[0]!
+    expect(url instanceof URL ? url.href : typeof url === 'string' ? url : url.url)
+      .toBe('http://192.168.100.113:19091/api/blade-auth/oauth/token')
+    expect(init?.method).toBe('POST')
+    expect(typeof init?.body).toBe('string')
+    const form = new URLSearchParams(typeof init?.body === 'string' ? init.body : '')
+    expect(form.get('username')).toBe('alice')
+    expect(form.get('tenantId')).toBe('000000')
+    expect(form.get('password')).not.toBe('fixture-password')
+    expect(form.get('password')).toMatch(/^[0-9a-f]+$/u)
+    expect(init?.headers).toMatchObject({ 'User-Type': 'app', 'Tenant-Id': '000000' })
+  })
+
+  it('rejects an unconfigured or refused OAuth exchange without opening a session', async () => {
+    const missing = new G1brainAuth(() => ({ G1BRAIN_AUTH_MODE: 'oauth' }))
+    expect(await missing.login('alice', 'password')).toEqual({ ok: false, reason: 'missing-config' })
+    const refused = new G1brainAuth(() => ({ G1BRAIN_AUTH_MODE: 'oauth', G1BRAIN_CLIENT_SECRET: 'fixture' }),
+      vi.fn<typeof fetch>(async () => new Response('{}', { status: 401 })))
+    expect(await refused.login('alice', 'password')).toEqual({ ok: false, reason: 'invalid-credentials' })
+    expect(refused.signedIn).toBe(false)
+  })
+})

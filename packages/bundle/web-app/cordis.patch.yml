@@ -117,6 +117,16 @@
     - id: plugin-inventory
       name: '@deepseek-ai/dsh-host-plugin-inventory'
 
+    # G1brain catalog remains Host-side; only Desktop enables this row.
+    - id: g1brain-integration
+      name: '@deepseek-ai/dsh-g1brain-integration'
+      disabled: !!js "ctx.get('profileContext')?.name !== 'desktop'"
+      config:
+        baseUrl: !!js process.env.G1BRAIN_BASE_URL
+        clientId: !!js process.env.G1BRAIN_CLIENT_ID
+        tenantId: !!js process.env.G1BRAIN_TENANT_ID
+        timeoutMs: !!js process.env.G1BRAIN_TIMEOUT_MS && Number(process.env.G1BRAIN_TIMEOUT_MS)
+
     # Session commands, cold reads, and live control over Typert Remote.
     - id: session-controller
       name: '@deepseek-ai/dsh-api-session-controller'
@@ -330,6 +340,7 @@
     # Official occupants for the generic sidebar and conversation brand slots.
     - id: ui-brand-official
       name: '@deepseek-ai/dsh-client-ui-brand-official'
+      disabled: !!js "ctx.get('profileContext')?.name === 'desktop'"
 
     - id: ui-attachment
       name: '@deepseek-ai/dsh-client-ui-attachment'
@@ -355,6 +366,10 @@
 
     - id: ui-workspace
       name: '@deepseek-ai/dsh-client-ui-workspace'
+
+    - id: ui-g1brain
+      name: '@deepseek-ai/dsh-client-ui-g1brain'
+      disabled: !!js "ctx.get('profileContext')?.name !== 'desktop'"
 
     # Durable workflow lifecycle as an independent Chat node after the
     # existing generic workflow tool row.

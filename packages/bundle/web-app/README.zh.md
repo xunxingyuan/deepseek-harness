@@ -58,6 +58,8 @@ dsh --profile web --no-open --port 8080
 
 生成的[配置目录](../../../docs/config-catalog.zh.md#deepseek-aidsh-web-app)列出了本运行时插件接受的字段及其 JSDoc。随发行版交付的组合插入 `schedule` 服务行与 `ui-schedule` 任务页面行，时钟读数与四个提醒工具则属于 `standard`、`cordis` 与 `ptc` 三个 preset。这三个 preset 的 `tool-subagent` 与 `tool-subagent-fork` 两行都 deny 这四个工具，因此被委派子 agent 的作用域不会列出它们。
 
+桌面 profile 还会启用本 bundle 中的 [G1brain 宿主集成](../../g1brain/integration/README.zh.md)与 [G1brain 工作台页面](../../client/ui-g1brain/README.zh.md)；普通 Web profile 保持这两项关闭。
+
 <a id="public-deployments"></a>
 ### 监听、信任与公开部署
 

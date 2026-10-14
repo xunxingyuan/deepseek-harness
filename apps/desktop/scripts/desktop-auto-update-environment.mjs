@@ -1,6 +1,7 @@
 /** Resolve the Desktop auto-update channel and its Tencent COS destination. */
 
 import { valid } from 'semver'
+import { DESKTOP_UPDATE_PREFIX } from './desktop-brand.mjs'
 
 /** Environment variable that selects the Desktop update deployment. */
 export const DESKTOP_AUTO_UPDATE_ENV = 'DSH_DESKTOP_AUTO_UPDATE_ENV'
@@ -14,8 +15,8 @@ const UPDATE_ENVIRONMENTS = {
     secretKeyEnvName: 'DOWNLOAD_TEST_COS_SECRET_KEY',
   },
   production: {
-    originEnvName: undefined,
-    fixedOrigin: 'https://download.deepseek.com',
+    originEnvName: 'G1BRAIN_DESKTOP_UPDATE_ORIGIN',
+    fixedOrigin: undefined,
     bucketEnvName: 'DOWNLOAD_PROD_COS_BUCKET',
     secretIdEnvName: 'DOWNLOAD_PROD_COS_SECRET_ID',
     secretKeyEnvName: 'DOWNLOAD_PROD_COS_SECRET_KEY',
@@ -137,7 +138,7 @@ export function resolveDesktopAutoUpdateConfig(env, platform, arch) {
     if (originEnvName === undefined) throw new Error('desktop auto-update: selected deployment has no origin')
     origin = httpsOrigin(requiredEnvironmentValue(env, originEnvName), originEnvName)
   }
-  let releasePrefix = 'dsh-desk'
+  let releasePrefix = DESKTOP_UPDATE_PREFIX
   if (environment === 'test') {
     const releaseId = requiredEnvironmentValue(env, 'DOWNLOAD_TEST_RELEASE_ID')
     if (!/^[a-f0-9]{32}$/u.test(releaseId)) {

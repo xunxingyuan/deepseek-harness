@@ -67,6 +67,7 @@ Every package lives in exactly one group; new packages join existing groups, and
 | [`bundle/`](bundle/README.md) | Installable `dsh --profile` patch layers |
 | [`extensions/`](extensions/README.md) | Agent runtime self-modification: live plugin/service inspection and model-written mount/unmount |
 | [`mcp/`](mcp/README.md) | External Model Context Protocol servers exposed as native tools |
+| [`g1brain/`](g1brain/README.md) | G1brain ontology and document integration for discovery, search, and selected Sessions |
 | [`hooks/`](hooks/README.md) | Hook bridges + the shared Claude Code / Codex wire-protocol library |
 | [`session/`](session/README.md) | Durable session data plane: persistence seam + backends, projection seam, log-backed titles, session reporting |
 | [`session-query/`](session-query/README.md) | Session retrieval family: logical corpus, bounded reads, lineage, semantic filtering, SQLite full-text search |

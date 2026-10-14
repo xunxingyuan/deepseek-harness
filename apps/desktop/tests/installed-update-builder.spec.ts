@@ -96,7 +96,7 @@ describe('installed-update application inputs and builder configuration', () => 
         expect(typeof config.beforeBuild).toBe('function')
         expect(config.nsis.include).toMatch(/scripts[\\/]installer\.nsh$/u)
         expect(config.publish[0]!.url)
-          .toMatch(/^https:\/\/download-test\.deepseek\.com\/dsh-desk\/feeds\/qualification\/[a-f0-9]{24}\/win-x64\/$/u)
+          .toMatch(/^https:\/\/download-test\.deepseek\.com\/g1brainxdeepseek-desk\/feeds\/qualification\/[a-f0-9]{24}\/win-x64\/$/u)
       }
     })
   })

@@ -1,5 +1,6 @@
 /** Launch the Desktop profile through the Web application and report its URL to Electron. */
 
+import { lstatSync, writeFileSync } from 'node:fs'
 import { delimiter, join } from 'node:path'
 import { inspect } from 'node:util'
 import { loadLayeredEnv, loadProfileDirectory, reportSkippedBundles } from '@deepseek-ai/dsh-app-boot'
@@ -22,11 +23,18 @@ async function main(): Promise<void> {
   const installAnchor = join(runtimeDir, 'node_modules', '@deepseek-ai', 'dsh', 'package.json')
   const profile = loadProfileDirectory('dsh', projectDir, installAnchor)
   reportSkippedBundles('dsh', profile)
+  const g1brainOverlay = join(projectDir, '.g1brain-desktop.overlay.yml')
+  try {
+    if (lstatSync(g1brainOverlay).isSymbolicLink()) throw new Error('G1brain Desktop overlay must not be a symlink')
+  } catch (error) {
+    if (!(error instanceof Error && 'code' in error && error.code === 'ENOENT')) throw error
+  }
+  writeFileSync(g1brainOverlay, '- id: ui-settings-account\n  disabled: true\n', { mode: 0o600 })
   const application = runProfile({
     environment: loadLayeredEnv('dsh'),
     profile: 'desktop',
     resolvedProfile: { profile, installAnchor },
-    patchFiles: [],
+    patchFiles: [g1brainOverlay],
     args: ['--no-open', '--port', '0'],
     ...(process.argv[5] === undefined ? {} : {
       packageManager: {

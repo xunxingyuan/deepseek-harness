@@ -24,6 +24,8 @@ function ApprovalFlow({ pending, reason, detail, t }: {
   detail: ReactNode
   t: ApprovalComposerProps['t']
 }) {
+  const sessionCreateGrant = /^g1brain_create_(?:document_library|ontology_(?:collection|domain|entity|relation|property|relation_type))$/u
+    .test(pending.toolName)
   const [answered, setAnswered] = useState(false)
   const waiting = useRef(false)
   const active = useRef(true)
@@ -79,7 +81,7 @@ function ApprovalFlow({ pending, reason, detail, t }: {
             {t('reject')}
           </Button>
           <Button variant="primary" disabled={answered} onClick={() => { answer('allowed-once') }}>
-            {t('allowOnce')}
+            {t(sessionCreateGrant ? 'allowSessionSameTool' : 'allowOnce')}
           </Button>
         </div>
       </div>

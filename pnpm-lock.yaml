@@ -599,9 +599,15 @@ importers:
       electron-updater:
         specifier: ^6.8.9
         version: 6.8.9
+      js-md5:
+        specifier: 0.7.3
+        version: 0.7.3
       semver:
         specifier: ^7.8.5
         version: 7.8.5
+      sm-crypto:
+        specifier: 0.5.7
+        version: 0.5.7
       ws:
         specifier: ^8.21.0
         version: 8.21.0
@@ -1274,6 +1280,9 @@ importers:
       '@deepseek-ai/dsh-file-reference':
         specifier: workspace:*
         version: link:../../context/file-reference
+      '@deepseek-ai/dsh-g1brain-integration':
+        specifier: workspace:*
+        version: link:../../g1brain/integration
       '@deepseek-ai/dsh-goal':
         specifier: workspace:*
         version: link:../../goal/goal
@@ -2504,6 +2513,9 @@ importers:
       '@deepseek-ai/dsh-client-ui-directory-picker-native':
         specifier: workspace:*
         version: link:../../client/ui-directory-picker-native
+      '@deepseek-ai/dsh-client-ui-g1brain':
+        specifier: workspace:*
+        version: link:../../client/ui-g1brain
       '@deepseek-ai/dsh-client-ui-goal':
         specifier: workspace:*
         version: link:../../client/ui-goal
@@ -2651,6 +2663,9 @@ importers:
       '@deepseek-ai/dsh-file-reference-local':
         specifier: workspace:*
         version: link:../../context/file-reference-local
+      '@deepseek-ai/dsh-g1brain-integration':
+        specifier: workspace:*
+        version: link:../../g1brain/integration
       '@deepseek-ai/dsh-host-directory-picker-auto':
         specifier: workspace:*
         version: link:../../host/directory-picker-auto
@@ -3831,6 +3846,57 @@ importers:
       react-dom:
         specifier: ^18.2.0
         version: 18.3.1(react@18.3.1)
+
+  packages/client/ui-g1brain:
+    devDependencies:
+      '@deepseek-ai/cordis':
+        specifier: workspace:~
+        version: link:../../../vendor/cordis
+      '@deepseek-ai/dsh-api-remotes':
+        specifier: workspace:*
+        version: link:../../api/remotes
+      '@deepseek-ai/dsh-api-session-controller':
+        specifier: workspace:*
+        version: link:../../api/session-controller
+      '@deepseek-ai/dsh-api-workspace-controller':
+        specifier: workspace:*
+        version: link:../../api/workspace-controller
+      '@deepseek-ai/dsh-client-locale':
+        specifier: workspace:*
+        version: link:../locale
+      '@deepseek-ai/dsh-client-ui-conversation':
+        specifier: workspace:*
+        version: link:../ui-conversation
+      '@deepseek-ai/dsh-client-ui-layout':
+        specifier: workspace:*
+        version: link:../ui-layout
+      '@deepseek-ai/dsh-client-ui-primitives':
+        specifier: workspace:*
+        version: link:../ui-primitives
+      '@deepseek-ai/dsh-client-ui-renderer':
+        specifier: workspace:*
+        version: link:../ui-renderer
+      '@deepseek-ai/dsh-client-ui-sidebar':
+        specifier: workspace:*
+        version: link:../ui-sidebar
+      '@deepseek-ai/dsh-client-ui-slots':
+        specifier: workspace:*
+        version: link:../ui-slots
+      '@deepseek-ai/dsh-client-ui-workspace':
+        specifier: workspace:*
+        version: link:../ui-workspace
+      '@deepseek-ai/dsh-g1brain-integration':
+        specifier: workspace:*
+        version: link:../../g1brain/integration
+      '@testing-library/react':
+        specifier: ^16.1.0
+        version: 16.3.2(@testing-library/dom@10.4.2)(@types/react-dom@18.3.7(@types/react@18.3.31))(@types/react@18.3.31)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
+      '@types/react':
+        specifier: ~18.3.1
+        version: 18.3.31
+      react:
+        specifier: ^18.2.0
+        version: 18.3.1
 
   packages/client/ui-goal:
     devDependencies:
@@ -8964,6 +9030,49 @@ importers:
       '@deepseek-ai/dsh-tools':
         specifier: workspace:*
         version: link:../../core/tools
+
+  packages/g1brain/integration:
+    dependencies:
+      '@deepseek-ai/dsh-home-paths':
+        specifier: workspace:*
+        version: link:../../util/home-paths
+      '@deepseek-ai/dsh-scope':
+        specifier: workspace:*
+        version: link:../../core/scope
+      '@deepseek-ai/dsh-system-prompt':
+        specifier: workspace:*
+        version: link:../../core/system-prompt
+      '@deepseek-ai/schemastery':
+        specifier: link:../../../vendor/schemastery
+        version: link:../../../vendor/schemastery
+      js-md5:
+        specifier: 0.7.3
+        version: 0.7.3
+      sm-crypto:
+        specifier: 0.5.7
+        version: 0.5.7
+      zod:
+        specifier: ^4.4.3
+        version: 4.4.3
+    devDependencies:
+      '@deepseek-ai/cordis':
+        specifier: workspace:~
+        version: link:../../../vendor/cordis
+      '@deepseek-ai/dsh-agent':
+        specifier: workspace:*
+        version: link:../../core/agent
+      '@deepseek-ai/dsh-session':
+        specifier: workspace:*
+        version: link:../../core/session
+      '@deepseek-ai/dsh-tools':
+        specifier: workspace:*
+        version: link:../../core/tools
+      '@deepseek-ai/dsh-typert-protocol':
+        specifier: workspace:*
+        version: link:../../typert/protocol
+      '@deepseek-ai/dsh-user-approval':
+        specifier: workspace:*
+        version: link:../../interaction/user-approval
 
   packages/goal/command-goal:
     devDependencies:
@@ -19846,6 +19955,9 @@ packages:
   jose@6.2.3:
     resolution: {integrity: sha512-YYVDInQKFJfR/xa3ojUTl8c2KoTwiL1R5Wg9YCydwH0x0B9grbzlg5HC7mMjCtUJjbQ/YnGEZIhI5tCgfTb4Hw==}
 
+  js-md5@0.7.3:
+    resolution: {integrity: sha512-ZC41vPSTLKGwIRjqDh8DfXoCrdQIyBgspJVPXHBGu4nZlAEvG3nf+jO9avM9RmLiGakg7vz974ms99nEV0tmTQ==}
+
   js-tokens@10.0.0:
     resolution: {integrity: sha512-lM/UBzQmfJRo9ABXbPWemivdCW8V2G8FHaHdypQaIy523snUjog0W71ayWXTjiR+ixeMyVHN2XcpnTd/liPg/Q==}
 
@@ -19865,6 +19977,9 @@ packages:
 
   jsbn@0.1.1:
     resolution: {integrity: sha512-UVU9dibq2JcFWxQPA6KCqj5O42VOmAY3zQUfEKxU0KpTGXwNoCjkX1e13eHNvw/xPynt6pU0rZ1htjWTNTSXsg==}
+
+  jsbn@1.1.0:
+    resolution: {integrity: sha512-4bYVV3aAMtDTTu4+xsDYa6sy9GyJ69/amsu9sYF2zqjiEoZA5xJi3BrfX3uY+/IekIu7MwdObdbDWpoZdBv3/A==}
 
   jscpd-darwin-arm64@5.0.12:
     resolution: {integrity: sha512-CQCDYhQY9yOGGeauzkRGYW/QtXurPCjfDkEhUoM/M5UdmpzxfG3i9mnNsaheJ0RdFRf73mL7JaLVRP8U2l5/kA==}
@@ -21381,6 +21496,9 @@ packages:
   simple-update-notifier@2.0.0:
     resolution: {integrity: sha512-a2B9Y0KlNXl9u/vsW6sTIu9vGEpfKu2wRV6l1H3XEas/0gUIzGzBoP/IouTcUQbm9JWZLH3COxyn03TYlFax6w==}
     engines: {node: '>=10'}
+
+  sm-crypto@0.5.7:
+    resolution: {integrity: sha512-Bxz1jWGtI7t/bn6Vbf4iGKcntslKVYAi6oBTtboTL+0WhqBTwsDFinIxIezjkBidxt8aNnEF1V3ZYU6TI0V1gQ==}
 
   smol-toml@1.7.1:
     resolution: {integrity: sha512-PPlsspAZ4jbMBu5DMFhfUGDQLu/vrL4SyBROVS37x8ynnVmFIs1VPBz1Co8Xks3TvpIaZXmU85y4DrQ+UyVFoQ==}
@@ -27295,6 +27413,8 @@ snapshots:
 
   jose@6.2.3: {}
 
+  js-md5@0.7.3: {}
+
   js-tokens@10.0.0: {}
 
   js-tokens@4.0.0: {}
@@ -27310,6 +27430,8 @@ snapshots:
   jsbi@4.3.2: {}
 
   jsbn@0.1.1: {}
+
+  jsbn@1.1.0: {}
 
   jscpd-darwin-arm64@5.0.12:
     optional: true
@@ -29060,6 +29182,10 @@ snapshots:
   simple-update-notifier@2.0.0:
     dependencies:
       semver: 7.8.5
+
+  sm-crypto@0.5.7:
+    dependencies:
+      jsbn: 1.1.0
 
   smol-toml@1.7.1: {}
 

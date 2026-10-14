@@ -322,6 +322,7 @@ function panelProps(
     escalation: `Tool ${pending.toolName} asks`,
     reject: 'Reject',
     allowOnce: 'Allow once',
+    allowSessionSameTool: 'Allow this tool in this Session',
   }
   return {
     matched: pending,
@@ -368,6 +369,16 @@ describe('ApprovalPanel', () => {
     expect(document.querySelector('[data-approval-key]')?.getAttribute('aria-busy')).toBe('true')
 
     await expect(pending.result).resolves.toBe('allowed-once')
+  })
+
+  it('labels a bounded G1brain creation grant without changing other write approvals', async () => {
+    const creation = new PendingApproval(id('s1'), { toolName: 'g1brain_create_ontology_property' })
+    const view = render(<ApprovalPanel {...panelProps(creation)} />)
+    fireEvent.click(screen.getByRole('button', { name: 'Allow this tool in this Session' }))
+    await expect(creation.result).resolves.toBe('allowed-once')
+    const deletion = new PendingApproval(id('s1'), { toolName: 'g1brain_delete_ontology_property' })
+    view.rerender(<ApprovalPanel {...panelProps(deletion)} />)
+    expect(screen.getByRole('button', { name: 'Allow once' })).toBeTruthy()
   })
 
   it('keeps the audit reason intact and follows the UI language for presentation copy', () => {

@@ -1,0 +1,6 @@
+.mark { display: inline-flex; align-items: flex-end; justify-content: center; gap: 3px; }
+.mark i { width: 5px; border-radius: 3px; flex: none; }
+.mark i:nth-child(1) { height: 48%; background: var(--dsw-static-blue-500); }
+.mark i:nth-child(2) { height: 72%; background: var(--dsw-static-green-500); }
+.mark i:nth-child(3) { height: 96%; background: var(--dsw-static-amber-500); }
+.name { color: var(--dsw-alias-label-primary); font-size: 14px; font-weight: 650; white-space: nowrap; }

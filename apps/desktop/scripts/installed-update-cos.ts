@@ -4,6 +4,7 @@ import { createHash } from 'node:crypto'
 import { Readable, Writable } from 'node:stream'
 import { cosOperation } from './cos-operation.ts'
 import { createDesktopCos, DESKTOP_COS_REGION } from './desktop-cos.ts'
+import { DESKTOP_UPDATE_PREFIX } from './desktop-brand.mjs'
 import { loadDesktopPackageEnvironment } from './desktop-package-environment.mjs'
 import type { InstalledUpdatePublicationStore, InstalledUpdateRemoteObject } from './installed-update-publication.ts'
 
@@ -39,7 +40,7 @@ export function createInstalledUpdateCos(): InstalledUpdatePublicationStore {
   }
   const client = () => createDesktopCos(credentials)
   const keyAllowed = (key: string): void => {
-    if (!/^dsh-desk\/(?:bin|feeds)\/qualification\/[a-f0-9]{24}\/win-x64\/[A-Za-z0-9][A-Za-z0-9._-]*$/u.test(key)) {
+    if (!(new RegExp(`^${DESKTOP_UPDATE_PREFIX}/(?:bin|feeds)/qualification/[a-f0-9]{24}/win-x64/[A-Za-z0-9][A-Za-z0-9._-]*$`, 'u').test(key))) {
       throw new Error('installed update: COS key must stay in the Windows qualification namespace')
     }
   }

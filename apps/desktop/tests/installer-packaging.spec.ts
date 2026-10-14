@@ -74,7 +74,21 @@ describe('installer preparation preserves application dependencies', () => {
       DSH_DESKTOP_TARGET_ARCH: 'x64',
       DSH_DESKTOP_UNSIGNED: '1',
     }, 'win32', 'x64')
-    expect(config.artifactName).toBe('deepseek-harness-${version}-${os}-${arch}-unsigned.${ext}')
+    expect(config.artifactName).toBe('g1brainxdeepseek-${version}-${os}-${arch}-unsigned.${ext}')
+    expect(config.extraMetadata).not.toHaveProperty('dshMandatoryUpdatePolicy')
+  })
+
+  it('builds an unsigned macOS DMG without signing, notarization, or update metadata', async () => {
+    const { createElectronBuilderConfig } = await import('../scripts/electron-builder-config.mjs')
+    const config = createElectronBuilderConfig({
+      DSH_DESKTOP_TARGET_PLATFORM: 'darwin', DSH_DESKTOP_TARGET_ARCH: 'arm64', DSH_DESKTOP_UNSIGNED: '1',
+    }, 'darwin', 'arm64')
+    expect(config.artifactName).toBe('g1brainxdeepseek-${version}-${os}-${arch}-unsigned.${ext}')
+    expect(config.mac).toMatchObject({ identity: null, forceCodeSigning: false, hardenedRuntime: false,
+      notarize: false, target: ['dmg'] })
+    expect(config.dmg.sign).toBe(false)
+    expect(config.publish).toBeNull()
+    expect(config.extraMetadata).not.toHaveProperty('dshMandatoryUpdatePolicy')
   })
 
   it('packages every preload entry point the shell loads', async () => {
@@ -90,6 +104,7 @@ describe('installer preparation preserves application dependencies', () => {
     const config = createElectronBuilderConfig({
       DSH_DESKTOP_APP_ID: 'com.example.installer',
       DSH_DESKTOP_AUTO_UPDATE_ENV: 'production',
+      G1BRAIN_DESKTOP_UPDATE_ORIGIN: 'https://download.g1brain.example.com',
       DSH_DESKTOP_MANDATORY_UPDATE_TEST_ORIGIN: 'https://harness-test.deepseek.com',
       DSH_DESKTOP_MANDATORY_UPDATE_PROD_ORIGIN: 'https://policy.example.com',
       DSH_DESKTOP_MACOS_SIGNING_IDENTITY: 'Example Company (TEAMID1234)',

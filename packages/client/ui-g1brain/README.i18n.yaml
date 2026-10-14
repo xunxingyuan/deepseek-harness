@@ -1,0 +1,46 @@
+# Bilingual-pair consistency record for README.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write packages/client/ui-g1brain/README.md
+/:
+  en: 7c4ad428e1793832
+  zh: fb9f7a68a9538364
+/g1brain-workbench-ui:
+  en: 754a281b9f2c4bbe
+  zh: 135de09d038a36e4
+/g1brain-workbench-ui/summary:
+  en: 38e9e681437c8528
+  zh: 50add20285607ef4
+/g1brain-workbench-ui/table-of-contents:
+  en: 0d685fe89ebcee6b
+  zh: 0c6d3f99579b1b17
+/g1brain-workbench-ui/use-this-package:
+  en: 6bdf84d5b7cd5814
+  zh: 71e6b170f5410cbe
+/g1brain-workbench-ui/understand-the-package:
+  en: 4b6ab2b896270c0b
+  zh: 7f1541ea000bcc92
+/g1brain-workbench-ui/further-reading:
+  en: 4e437736c780bc02
+  zh: 8bd3cd68b7a50203
+/g1brain-workbench-ui/model-experience:
+  en: 215e7ba838619b7b
+  zh: a311da3843709f90
+/g1brain-workbench-ui/model-experience/prepared-session-draft:
+  en: 47cf87e4aa211255
+  zh: ec2444497f4f201e
+/g1brain-workbench-ui/model-experience/prepared-session-draft/what-the-model-sees:
+  en: 553b9ac10d819447
+  zh: 8a2be859d50c417d
+/g1brain-workbench-ui/model-experience/prepared-session-draft/token-effect:
+  en: df880628a16952e5
+  zh: 0d98a53e6c6ebea4
+/g1brain-workbench-ui/model-experience/prepared-session-draft/kv-cache-effect:
+  en: 121452f4bd8b9aa6
+  zh: 34d72d70eb7ad11b
+/g1brain-workbench-ui/known-limitations-and-deferred-work:
+  en: e73d918459f4ec77
+  zh: fd031e7fdb5ba177
+/g1brain-workbench-ui/known-limitations-and-deferred-work/dev-note:
+  en: 0a1253c6f7b5e8b9
+  zh: 9f56528562c7c914

@@ -476,6 +476,7 @@
     { "path": "./packages/host/frontend-static" },
     { "path": "./packages/host/open-in-app" },
     { "path": "./packages/host/plugin-inventory" },
+    { "path": "./packages/g1brain/integration" },
     { "path": "./packages/boot/plugin-manager" },
     { "path": "./packages/llm/plugin-package-inventory-deepseek" },
     { "path": "./packages/host/webserver" },

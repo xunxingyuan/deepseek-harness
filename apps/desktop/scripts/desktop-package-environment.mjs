@@ -1,6 +1,6 @@
 /** Load platform-local release settings without changing the caller's process environment. */
 
-import { accessSync, constants, readFileSync, statSync } from 'node:fs'
+import { accessSync, constants, existsSync, readFileSync, statSync } from 'node:fs'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { parseEnv } from 'node:util'
@@ -20,17 +20,18 @@ const AMBIENT_RELEASE_SETTING = /^(?:DSH_DESKTOP_(?:APP_ID|AUTO_UPDATE_ENV|MANDA
 const FILE_SETTINGS = ['DSH_DESKTOP_WINDOWS_CER_FILE', 'DSH_DESKTOP_WINDOWS_SIGNTOOL', 'APPLE_API_KEY', 'APPLE_KEYCHAIN', 'CSC_LINK']
 
 /**
- * Read the target's required UTF-8 dotenv file; release settings never fall back to ambient values.
+ * Read the target's UTF-8 dotenv file; unsigned test builds may omit it.
  * @param {'win32' | 'darwin'} platform Target platform.
  * @param {NodeJS.ProcessEnv} environment Parent environment, retained only for unrelated build tools.
  * @param {string} appRoot Desktop application directory; relative credential paths resolve here.
+ * @param {{ unsigned?: boolean }} options Explicit unsigned test mode.
  * @returns {NodeJS.ProcessEnv} Isolated environment with file-owned release settings.
  */
-export function loadDesktopPackageEnvironment(platform, environment = process.env, appRoot = APP_ROOT) {
+export function loadDesktopPackageEnvironment(platform, environment = process.env, appRoot = APP_ROOT, options = {}) {
   const path = join(appRoot, platform === 'win32' ? '.env.windows' : '.env.macos')
   let contents
   try {
-    contents = readFileSync(path, 'utf8')
+    contents = options.unsigned && !existsSync(path) ? '' : readFileSync(path, 'utf8')
   }
   catch {
     throw new Error(`desktop package: cannot read ${path}; copy ${path}.example and fill in the local settings`)
@@ -79,7 +80,7 @@ function requireReadableFile(environment, name) {
 export function validateDesktopPackageEnvironment(environment, target, options = {}) {
   resolveDesktopAppId(environment)
   resolveNpmRegistry(environment)
-  resolveDesktopPolicyEnvironment(environment)
+  if (!options.unsigned) resolveDesktopPolicyEnvironment(environment)
   if (target.platform === 'darwin') resolveMacOSPackageSettings(environment)
   else resolveWindowsPackageSettings(environment)
   if (options.unsigned) return

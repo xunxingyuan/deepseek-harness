@@ -16,7 +16,7 @@ async function fixture<T>(body: (manifest: string) => Promise<T>): Promise<T> {
     for (const version of versions) {
       const output = join(run.root, version, 'installer')
       await mkdir(output, { recursive: true })
-      const filename = `deepseek-harness-${version}-win-x64.exe`
+      const filename = `g1brainxdeepseek-${version}-win-x64.exe`
       const body = Buffer.from(`inert fixture ${version}`)
       await writeFile(join(output, filename), body)
       await writeFile(join(output, `${filename}.blockmap`), 'inert map')
@@ -35,8 +35,8 @@ describe('qualification distribution file planning', () => {
       expect(old!.feed.sha512).not.toBe(next!.feed.sha512)
       expect(old!.binaries.map(file => file.key)).not.toEqual(next!.binaries.map(file => file.key))
       expect(next!.binaries).toHaveLength(2)
-      expect(next!.binaries.every(file => file.key.startsWith('dsh-desk/bin/qualification/'))).toBe(true)
-      expect(next!.feed.key).toMatch(/^dsh-desk\/feeds\/qualification\/[a-f0-9]{24}\/win-x64\/nightly.yml$/u)
+      expect(next!.binaries.every(file => file.key.startsWith('g1brainxdeepseek-desk/bin/qualification/'))).toBe(true)
+      expect(next!.feed.key).toMatch(/^g1brainxdeepseek-desk\/feeds\/qualification\/[a-f0-9]{24}\/win-x64\/nightly.yml$/u)
       expect(next!.publicationAuthorized).toBe(false)
       expect(next!.verified).toBe('file-integrity-only')
       expect(load(next!.feed.contents)).toMatchObject({ version: versions[1],

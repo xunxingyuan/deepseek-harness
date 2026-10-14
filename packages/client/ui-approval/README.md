@@ -20,6 +20,8 @@ Browser approval presentation over the Agent-scoped Remote Event waterfall. The 
 
 Focus the approval detail region to approve with Enter or reject with Escape. The mounted plugin reserves both keys against editable shortcuts. Enter on the focused Reject button retains its native reject action. Input controls and IME candidates keep their own keys. Keyboard and pointer actions share one pending-request lock; a withdrawn or replaced request cannot accept another answer, and an earlier failed answer cannot unlock its replacement.
 
+For the seven G1brain creation tools, the primary button says **Allow this tool in this Session**. The Host still receives one `allowed-once` decision for that first call, then owns the bounded, in-memory reuse policy described by the G1brain integration package. All other requests retain **Allow once**. The request text states the grant's target, duration, and call limit.
+
 <a id="model-experience"></a>
 ## Model Experience
 
@@ -33,7 +35,7 @@ None; approval request and response rendering does not alter a model request.
 
 <a id="known-limitations-and-deferred-work"></a>
 
-- **The panel exposes transient decisions only** — it supports allow-once and reject; persistent permission policy remains owned by Host-side approval packages. Requester-supplied localized presentation copy follows the UI language without changing the audit reason or translating model-generated text.
+- **The panel exposes transient decisions only** — the protocol still returns `allowed-once` or reject; the G1brain Host interprets its creation-tool approval as a bounded Session grant. Other persistent permission policy remains owned by Host-side approval packages. Requester-supplied localized presentation copy follows the UI language without changing the audit reason or translating model-generated text.
 
 
 <a id="dev-note"></a>

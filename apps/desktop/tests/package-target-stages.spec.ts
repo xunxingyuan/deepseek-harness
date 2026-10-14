@@ -65,7 +65,7 @@ it('requires one signing preflight before building, then records only the comple
   }
   expect(writeFileSync).toHaveBeenCalledOnce()
   const record = JSON.parse(vi.mocked(writeFileSync).mock.calls[0]![1] as string) as { publicUrl: string }
-  expect(record.publicUrl).toBe('https://updates.example.com/dsh-desk/0123456789abcdef0123456789abcdef/feeds/win-x64/')
+  expect(record.publicUrl).toBe('https://updates.example.com/g1brainxdeepseek-desk/0123456789abcdef0123456789abcdef/feeds/win-x64/')
 })
 
 it('initializes shared storage only after acquiring the preflight stage lock', async () => {
@@ -100,6 +100,25 @@ it.each(['--unsigned', '--prepare-only'])('keeps %s hardware-free and creates no
   for (const call of run.run.mock.calls) expect(call[3].env).not.toHaveProperty('DSH_DESKTOP_WINDOWS_TOKEN_PIN')
   expect(writeFileSync).not.toHaveBeenCalled()
   expect(stages.includes('exec tsx scripts/smoke-packaged-runtime.ts --unsigned')).toBe(mode === '--unsigned')
+})
+
+it('builds unsigned macOS artifacts without a keychain, notarization, or a release record', async () => {
+  const { run, stages } = supervisor()
+  await packageTarget(parseDesktopPackageInvocation(['mac-arm64', '--unsigned'], 'darwin', 'arm64'), {
+    APPLE_ID: 'fixture-account', CSC_LINK: 'fixture-key', DSH_DESKTOP_MACOS_SIGNING_IDENTITY: 'fixture-identity',
+  }, run)
+  expect(stages).toContain('exec electron-builder --config electron-builder.config.mjs --mac --arm64 --publish never')
+  expect(stages.at(-1)).toBe('exec tsx scripts/smoke-packaged-runtime.ts --unsigned')
+  expect(packageMacOSArtifacts).not.toHaveBeenCalled()
+  expect(withMacOSNotarizationProxy).not.toHaveBeenCalled()
+  expect(writeFileSync).not.toHaveBeenCalled()
+  const prepared = run.run.mock.calls.find(call => call[0] === 'run prepare:dsh')
+  expect(prepared?.[3].env).toMatchObject({ DSH_DESKTOP_UNSIGNED: '1' })
+  for (const call of run.run.mock.calls) {
+    expect(call[3].env).not.toHaveProperty('APPLE_ID')
+    expect(call[3].env).not.toHaveProperty('CSC_LINK')
+    expect(call[3].env).not.toHaveProperty('DSH_DESKTOP_MACOS_SIGNING_IDENTITY')
+  }
 })
 
 it('checks the assembled macOS runtime before notarizing and recording the release', async () => {

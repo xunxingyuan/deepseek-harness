@@ -1,0 +1,46 @@
+# Bilingual-pair consistency record for README.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write packages/g1brain/integration/README.md
+/:
+  en: 18b8feb41db388a9
+  zh: 6c12f5bdb91c4711
+/g1brain-integration:
+  en: c80fdff995bab912
+  zh: 38a01ab4bf881800
+/g1brain-integration/summary:
+  en: 1545445e2efbd176
+  zh: fbb6c0079973a759
+/g1brain-integration/table-of-contents:
+  en: 0d685fe89ebcee6b
+  zh: 0c6d3f99579b1b17
+/g1brain-integration/use-this-package:
+  en: c2d945f84ad0cf12
+  zh: 1b8e7704e55b0f5f
+/g1brain-integration/understand-the-package:
+  en: 81011777c160a790
+  zh: 078ef03539106300
+/g1brain-integration/further-reading:
+  en: f94d0e81d89ded69
+  zh: 47a152cfb106b9a2
+/g1brain-integration/model-experience:
+  en: 215e7ba838619b7b
+  zh: a311da3843709f90
+/g1brain-integration/model-experience/catalog-and-bound-session-tools:
+  en: a9ca540b87c99cf4
+  zh: 7bc0d09e41a3401a
+/g1brain-integration/model-experience/catalog-and-bound-session-tools/what-the-model-sees:
+  en: 2c1735837219e359
+  zh: 84466dd05eaf7eaf
+/g1brain-integration/model-experience/catalog-and-bound-session-tools/token-effect:
+  en: 5cb8e71697377526
+  zh: 8bc833de5b28e50b
+/g1brain-integration/model-experience/catalog-and-bound-session-tools/kv-cache-effect:
+  en: 60c5b78cdde3eb7c
+  zh: 586e6e0fe6a38ddb
+/g1brain-integration/known-limitations-and-deferred-work:
+  en: 24916cb61cc3c97d
+  zh: 56fb193819087e98
+/g1brain-integration/known-limitations-and-deferred-work/dev-note:
+  en: 0a1253c6f7b5e8b9
+  zh: 9f56528562c7c914

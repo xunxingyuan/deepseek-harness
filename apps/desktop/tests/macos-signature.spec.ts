@@ -42,7 +42,7 @@ describe('desktop macOS release signature', () => {
   it('loads release identifiers from the environment and requires code signing', async () => {
     const { createElectronBuilderConfig } = await import('../electron-builder.config.mjs')
     const config = createElectronBuilderConfig(RELEASE_ENVIRONMENT, 'darwin', 'arm64')
-    expect(config.protocols).toEqual([{ name: 'DeepSeek Harness', schemes: ['dsh'] }])
+    expect(config.protocols).toEqual([{ name: 'G1brain X DeepSeek', schemes: ['g1brainxdeepseek'] }])
     expect(portablePath(config.directories.output)).toContain('/.desktop-build/targets/mac-arm64/artifacts')
     expect(config.mac.extendInfo.NSMicrophoneUsageDescription).toContain('microphone')
     expect(config.mac.entitlementsInherit).toBe(config.mac.entitlements)
@@ -68,6 +68,9 @@ describe('desktop macOS release signature', () => {
     ]))
     expect(config).toMatchObject({
       appId: RELEASE_ENVIRONMENT.DSH_DESKTOP_APP_ID,
+      productName: 'G1brain X DeepSeek',
+      artifactName: 'g1brainxdeepseek-${version}-${os}-${arch}.${ext}',
+      extraMetadata: { name: 'g1brainxdeepseek-desktop' },
       mac: {
         identity: RELEASE_ENVIRONMENT.DSH_DESKTOP_MACOS_SIGNING_IDENTITY,
         forceCodeSigning: true,
@@ -80,7 +83,7 @@ describe('desktop macOS release signature', () => {
       },
       publish: [{
         provider: 'generic',
-        url: 'https://desktop-updates.example.com/dsh-desk/0123456789abcdef0123456789abcdef/feeds/mac-arm64/',
+        url: 'https://desktop-updates.example.com/g1brainxdeepseek-desk/0123456789abcdef0123456789abcdef/feeds/mac-arm64/',
         channel: 'nightly',
       }],
     })
@@ -185,7 +188,8 @@ describe('desktop macOS release signature', () => {
   })
 
   it('rejects missing and malformed release identifiers', () => {
-    expect(() => resolveDesktopAppId({})).toThrow(/DSH_DESKTOP_APP_ID/u)
+    expect(resolveDesktopAppId({})).toBe('com.giantan.g1brainxdeepseek')
+    expect(() => resolveDesktopAppId({ DSH_DESKTOP_APP_ID: 'com.deepseek.dsh' })).toThrow(/must not reuse/u)
     expect(() => resolveDesktopAppId({ DSH_DESKTOP_APP_ID: 'not-a-bundle-id' })).toThrow(/reverse-DNS/u)
     expect(() => resolveMacOSSigningEnvironment({})).toThrow(/DSH_DESKTOP_MACOS_SIGNING_IDENTITY/u)
     expect(() => resolveMacOSSigningEnvironment({

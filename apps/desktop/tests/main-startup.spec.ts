@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from 
 import type { IpcMainInvokeEvent } from 'electron'
 import { join } from 'node:path'
 import { mkdtempSync, readFileSync, readdirSync, rmSync } from 'node:fs'
-import { tmpdir } from 'node:os'
+import { homedir, tmpdir } from 'node:os'
 import type { MenuItemConstructorOptions, MessageBoxOptions } from 'electron'
 import { DESKTOP_IPC, type DesktopUpdateState } from '../src/ipc.ts'
 import { MANDATORY_IPC } from '../src/mandatory-update-ipc.ts'
@@ -317,7 +317,10 @@ vi.mock('../src/login-shell-environment.ts', async importOriginal => ({
   readDesktopLoginShellEnvironment: harness.loginShell,
 }))
 vi.mock('../src/runtime-tree.ts', () => ({ readDesktopRuntime: () => ({ release: { version: '1.0.0' } }) }))
-vi.mock('../src/paths.ts', () => ({ resolveDesktopPaths: () => ({ profile: 'desktop-test-profile' }) }))
+vi.mock('../src/paths.ts', async importOriginal => ({
+  ...await importOriginal<typeof import('../src/paths.ts')>(),
+  resolveDesktopPaths: () => ({ profile: 'desktop-test-profile' }),
+}))
 vi.mock('../src/project-manager.ts', () => ({
   DesktopProjectManager: class {
     readonly applyRelease = harness.applyRelease
@@ -371,6 +374,13 @@ vi.mock('../src/welcome-backend.ts', () => ({
   }),
 }))
 
+// These shell lifecycle cases begin after G1brain login; credential-entry behavior has its own tests.
+vi.mock('../src/g1brain-auth.ts', () => ({ G1brainAuth: class {
+  get signedIn() { return true }
+  get mode() { return 'local-dev' }
+  async login(username: string) { return { ok: true, username } }
+}, g1brainDevelopmentHostEnvironment: () => ({}) }))
+
 function invoke(channel: string, origin = channel === DESKTOP_IPC.boot ? 'app' : 'shell', ...args: unknown[]): unknown {
   const handler = harness.handlers.get(channel)
   if (handler === undefined) throw new Error(`missing handler ${channel}`)
@@ -400,6 +410,7 @@ beforeEach(() => {
   harness.reset()
   const userData = mkdtempSync(join(tmpdir(), 'dsh-main-user-data-'))
   onTestFinished(() => { rmSync(userData, { recursive: true, force: true }) })
+  vi.stubEnv('DSH_HOME', join(userData, 'home'))
   harness.app.getPath.mockImplementation(name => name === 'userData' ? userData : `desktop-test-${name}`)
   harness.dialog.showMessageBox.mockImplementation((options: { title?: string }) => {
     if (options.title !== en.startupFailed) return Promise.resolve({ response: 1 })
@@ -437,6 +448,14 @@ afterEach(async () => {
 })
 
 describe('desktop main startup', () => {
+  it('passes an isolated default home to the packaged Host', async () => {
+    vi.stubEnv('DSH_HOME', undefined)
+    await readyForUpdate()
+    const home = join(homedir(), '.g1brainxdeepseek')
+    expect(harness.hosts[0]?.environment?.DSH_HOME).toBe(home)
+    expect(harness.hosts[0]?.profile).toBe('desktop-test-profile')
+  })
+
   it('routes shell update documents and assets through the registered main protocol handler', async () => {
     const root = join(import.meta.dirname, '..')
     vi.spyOn(harness.app, 'getAppPath').mockReturnValue(root)
@@ -521,7 +540,7 @@ describe('desktop main startup', () => {
     await vi.advanceTimersByTimeAsync(0)
     const zh = locale === 'zh-CN'
     expect(harness.dialog.showMessageBox).toHaveBeenLastCalledWith(expect.objectContaining({
-      type: 'info', title: zh ? '关于 DeepSeek Harness' : 'About DeepSeek Harness', message: 'DeepSeek Harness',
+      type: 'info', title: zh ? '关于 G1brain X DeepSeek' : 'About G1brain X DeepSeek', message: 'G1brain X DeepSeek',
       detail: zh ? '版本 V1.0.0' : 'Version V1.0.0', buttons: [zh ? '确定' : 'OK'], cancelId: 0,
     }))
     // A dialog that cannot open is logged, not surfaced as an unhandled rejection.
@@ -845,7 +864,7 @@ describe('desktop main startup', () => {
     expect(() => handler(event, 'application', NaN, 34)).toThrow('invalid popup request')
     const application = handler(event, 'application', 48, 34)
     expect(harness.menu.buildFromTemplate.mock.lastCall![0].map(item => item.label ?? item.type)).toEqual([
-      '关于 DeepSeek Harness', 'separator', '检查更新…', '管理 dsh 命令…', 'separator', '退出',
+      '关于 G1brain X DeepSeek', 'separator', '检查更新…', '管理 dsh 命令…', 'separator', '退出',
     ])
     expect(harness.popup.mock.lastCall![0]).toMatchObject({ window, x: 48, y: 34 })
     expect(harness.popup.mock.lastCall![0].callback).toBeTypeOf('function')
@@ -2193,7 +2212,7 @@ describe('desktop main startup', () => {
   })
 })
 
-it.each(['failed', 'expired'] as const)('focuses DSH once when browser authorization becomes %s', async (phase) => {
+it.each(['failed', 'expired'] as const)('keeps G1brain workspace focus when official authorization becomes %s', async (phase) => {
   await import('../src/main.ts')
   await harness.preparing.promise
   harness.prepared.resolve()
@@ -2208,10 +2227,10 @@ it.each(['failed', 'expired'] as const)('focuses DSH once when browser authoriza
   }
   harness.publishAccount(state)
   harness.publishAccount(state)
-  expect(window.focus).toHaveBeenCalledTimes(1)
+  expect(window.focus).not.toHaveBeenCalled()
 })
 
-it.each([['light', false], ['dark', true]] as const)('opens Platform authorization in the effective %s palette', async (theme, shouldUseDarkColors) => {
+it.each([['light', false], ['dark', true]] as const)('does not open official authorization in the %s palette', async (_theme, shouldUseDarkColors) => {
   await import('../src/main.ts')
   await harness.preparing.promise
   harness.prepared.resolve()
@@ -2226,7 +2245,7 @@ it.each([['light', false], ['dark', true]] as const)('opens Platform authorizati
   }
   harness.publishAccount(state)
   harness.publishAccount(state)
-  expect(harness.openExternal).toHaveBeenCalledExactlyOnceWith(`https://platform.deepseek.com/dsh/authorize?state=state-1&theme=${theme}`)
+  expect(harness.openExternal).not.toHaveBeenCalled()
 })
 
 it('disables native product events for a disabled Desktop launch', async () => {

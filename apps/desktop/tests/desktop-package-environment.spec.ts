@@ -118,10 +118,28 @@ describe('Desktop local packaging configuration', () => {
     })
   })
 
-  it('checks application and update configuration before Windows credentials while preserving unsigned and preparation modes', () => {
+  it.each(['win32', 'darwin'] as const)('allows %s unsigned tests without a dotenv file, but never inherits release secrets', async (platform) => {
+    await withDirectory(async (directory) => {
+      const parent = { PATH: 'build-tools', APPLE_ID: 'ambient-apple', CSC_LINK: 'ambient-certificate',
+        DSH_DESKTOP_APP_ID: 'com.ambient.desktop', DOWNLOAD_TEST_ORIGIN: 'https://ambient.example.com' }
+      expect(loadDesktopPackageEnvironment(platform, parent, directory, { unsigned: true })).toEqual({ PATH: 'build-tools' })
+      const file = join(directory, platform === 'win32' ? '.env.windows' : '.env.macos')
+      await writeFile(file, 'INVALID_SETTING=secret-sentinel\n')
+      expect(() => loadDesktopPackageEnvironment(platform, parent, directory, { unsigned: true }))
+        .toThrow(/unsupported setting INVALID_SETTING/u)
+    })
+  })
+
+  it('checks signed update configuration and omits it for unsigned test builds', () => {
     expect(() => {
       validateDesktopPackageEnvironment({}, WINDOWS, { unsigned: true })
-    }).toThrow(/DSH_DESKTOP_APP_ID/u)
+    }).not.toThrow()
+    expect(() => {
+      validateDesktopPackageEnvironment({}, MACOS, { unsigned: true })
+    }).not.toThrow()
+    expect(() => {
+      validateDesktopPackageEnvironment({ DSH_DESKTOP_APP_ID: 'invalid' }, MACOS, { unsigned: true })
+    }).toThrow(/reverse-DNS/u)
     expect(() => {
       validateDesktopPackageEnvironment({ DSH_DESKTOP_APP_ID: 'invalid' }, WINDOWS)
     }).toThrow(/reverse-DNS/u)

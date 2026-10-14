@@ -1,0 +1,25 @@
+# Bilingual-pair consistency record for README.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write packages/g1brain/README.md
+/:
+  en: 008897ab665c93db
+  zh: 8725fa722f38f8d7
+/g1brain-ontology-and-document-integration:
+  en: 1e6cebe439e83088
+  zh: 13fb71f3cf18f502
+/g1brain-ontology-and-document-integration/summary:
+  en: 5d7b987e6d291709
+  zh: 06178a3e90f1216c
+/g1brain-ontology-and-document-integration/table-of-contents:
+  en: 1eb35b015a6c423f
+  zh: 77e3c25a679d81b1
+/g1brain-ontology-and-document-integration/packages:
+  en: 7e5ead06d6b13c26
+  zh: e2861f5f2c8a3afa
+/g1brain-ontology-and-document-integration/related-documentation:
+  en: 1c945bdbd1c13390
+  zh: e72b9f3f3f095402
+/g1brain-ontology-and-document-integration/dev-note:
+  en: b75c8458928b72b9
+  zh: 3ab9e4a6a8f0ba6e

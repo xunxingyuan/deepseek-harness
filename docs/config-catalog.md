@@ -1287,6 +1287,29 @@ export type Config = LocalConfig
 ```
 <!-- END GENERATED config-catalog:@deepseek-ai/dsh-fs-sandbox -->
 
+<!-- BEGIN GENERATED config-catalog:@deepseek-ai/dsh-g1brain-integration -->
+<a id="deepseek-aidsh-g1brain-integration"></a>
+
+## `@deepseek-ai/dsh-g1brain-integration`
+
+- `inject`: `tools` · `sessions` · `agents` · `approval`
+- `source`: [`packages/g1brain/integration/src/index.ts:64`](../packages/g1brain/integration/src/index.ts)
+
+```ts config-catalog
+/** Deployment settings; credentials stay in the Host process. */
+export interface Config {
+  /** G1brain HTTP(S) service root; empty keeps the plugin active but unconfigured. */
+  readonly baseUrl: string
+  /** OAuth Basic-auth client id. */
+  readonly clientId: string
+  /** Tenant header for catalog reads. */
+  readonly tenantId: string
+  /** Maximum duration of one catalog request in milliseconds. */
+  readonly timeoutMs: number
+}
+```
+<!-- END GENERATED config-catalog:@deepseek-ai/dsh-g1brain-integration -->
+
 <!-- BEGIN GENERATED config-catalog:@deepseek-ai/dsh-goal -->
 <a id="deepseek-aidsh-goal"></a>
 
@@ -4366,6 +4389,7 @@ These load from a `cordis.yml` entry with no `config:` block; they declare no co
 | `@deepseek-ai/dsh-client-ui-deliverables` | `systemPrompt` · `connection` · `sessionQuery` · `sessionController` · `workspaceFiles` · `fs` · `sandboxPolicy` · `workspaceChanges` | [`packages/client/ui-deliverables/src/index.ts`](../packages/client/ui-deliverables/src/index.ts) |
 | `@deepseek-ai/dsh-client-ui-directory-picker-browse` | — | [`packages/client/ui-directory-picker-browse/src/index.ts`](../packages/client/ui-directory-picker-browse/src/index.ts) |
 | `@deepseek-ai/dsh-client-ui-directory-picker-native` | — | [`packages/client/ui-directory-picker-native/src/index.ts`](../packages/client/ui-directory-picker-native/src/index.ts) |
+| `@deepseek-ai/dsh-client-ui-g1brain` | — | [`packages/client/ui-g1brain/src/index.ts`](../packages/client/ui-g1brain/src/index.ts) |
 | `@deepseek-ai/dsh-client-ui-goal` | — | [`packages/client/ui-goal/src/index.ts`](../packages/client/ui-goal/src/index.ts) |
 | `@deepseek-ai/dsh-client-ui-input-trigger` | — | [`packages/client/ui-input-trigger/src/index.ts`](../packages/client/ui-input-trigger/src/index.ts) |
 | `@deepseek-ai/dsh-client-ui-jobs` | — | [`packages/client/ui-jobs/src/index.ts`](../packages/client/ui-jobs/src/index.ts) |

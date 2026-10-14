@@ -40,13 +40,9 @@ function createWindow() {
 beforeEach(() => { electron.create.mockReset(); electron.handlers.clear() })
 
 const operations = {
+  loginG1brain: async () => ({ ok: true as const, username: 'admin' }),
+  g1brainMode: async () => 'local-dev' as const,
   analyticsEnabled: async () => true,
-  takeNotice: async () => undefined,
-  startSignIn: async () => ({ links: { usageUrl: 'http://localhost/usage', topUpUrl: 'http://localhost/top_up' }, status: 'signed-out' as const, attempt: null }),
-  cancelSignIn: async () => ({ links: { usageUrl: 'http://localhost/usage', topUpUrl: 'http://localhost/top_up' }, status: 'signed-out' as const, attempt: null }),
-  copySignInLink: async () => undefined,
-  saveApiKey: () => Promise.resolve({ ok: true as const }),
-  skip: () => Promise.resolve(),
 }
 
 describe('desktop welcome window', () => {
@@ -114,30 +110,17 @@ describe('desktop welcome window', () => {
   it('accepts actions only from its own top frame and removes handlers on close', async () => {
     const window = createWindow()
     electron.create.mockReturnValue(window)
-    const saveApiKey = vi.fn(operations.saveApiKey)
-    const skip = vi.fn(operations.skip)
-    const copySignInLink = vi.fn(operations.copySignInLink)
-    const takeNotice = vi.fn(async () => 'session-expired' as const)
-    await openWelcomeWindow(resolveDesktopLocale('en'), { ...operations, saveApiKey, skip, copySignInLink, takeNotice })
+    const loginG1brain = vi.fn(operations.loginG1brain)
+    await openWelcomeWindow(resolveDesktopLocale('en'), { ...operations, loginG1brain })
     const own = { sender: window.webContents, senderFrame: window.webContents.mainFrame }
-    const take = electron.handlers.get(WELCOME_IPC.takeNotice)!
-    await expect(take({ ...own, senderFrame: {} })).rejects.toThrow('unowned frame')
-    expect(takeNotice).not.toHaveBeenCalled()
-    expect(await take(own)).toBe('session-expired')
-    expect(takeNotice).toHaveBeenCalledOnce()
-    const save = electron.handlers.get(WELCOME_IPC.saveApiKey)!
-    await expect(save({ sender: {}, senderFrame: {} }, 'sk-test')).rejects.toThrow('unowned frame')
-    await expect(save({ ...own, senderFrame: {} }, 'sk-test')).rejects.toThrow('unowned frame')
-    expect(await save(own, 'bad key')).toEqual({ ok: false })
-    expect(saveApiKey).not.toHaveBeenCalled()
-    expect(await save(own, 'sk-test')).toEqual({ ok: true })
-    await electron.handlers.get(WELCOME_IPC.skip)!(own)
-    expect(skip).toHaveBeenCalledOnce()
-    const copy = electron.handlers.get(WELCOME_IPC.copyLink)!
-    await expect(copy({ ...own, senderFrame: {} }, 'attempt')).rejects.toThrow('unowned frame')
-    await expect(copy(own, 42)).rejects.toThrow('invalid attempt')
-    await copy(own, 'attempt')
-    expect(copySignInLink).toHaveBeenCalledExactlyOnceWith('attempt')
+    const login = electron.handlers.get(WELCOME_IPC.g1brainLogin)!
+    await expect(login({ ...own, senderFrame: {} }, { username: 'admin', password: 'test' })).rejects.toThrow('unowned frame')
+    expect(await login(own, { username: 'admin', password: 42 })).toEqual({ ok: false, reason: 'invalid-credentials' })
+    expect(loginG1brain).not.toHaveBeenCalled()
+    expect(await login(own, { username: 'admin', password: 'test' })).toEqual({ ok: true, username: 'admin' })
+    expect(loginG1brain).toHaveBeenCalledExactlyOnceWith({ username: 'admin', password: 'test' })
+    expect(await electron.handlers.get(WELCOME_IPC.g1brainMode)!(own)).toBe('local-dev')
+    expect(electron.handlers.size).toBe(4)
     window.once.mock.calls[0]![1]()
     expect(electron.handlers.size).toBe(0)
   })
@@ -162,20 +145,20 @@ describe('desktop welcome window', () => {
     const previous = createWindow()
     const current = createWindow()
     electron.create.mockReturnValueOnce(previous).mockReturnValueOnce(current)
-    const previousStart = vi.fn(operations.startSignIn)
-    const currentStart = vi.fn(operations.startSignIn)
-    await openWelcomeWindow(resolveDesktopLocale('en'), { ...operations, startSignIn: previousStart })
-    const previousHandler = electron.handlers.get(WELCOME_IPC.start)!
+    const previousLogin = vi.fn(operations.loginG1brain)
+    const currentLogin = vi.fn(operations.loginG1brain)
+    await openWelcomeWindow(resolveDesktopLocale('en'), { ...operations, loginG1brain: previousLogin })
+    const previousHandler = electron.handlers.get(WELCOME_IPC.g1brainLogin)!
     const previousSender = { sender: previous.webContents, senderFrame: previous.webContents.mainFrame }
-    await openWelcomeWindow(resolveDesktopLocale('en'), { ...operations, startSignIn: currentStart })
-    const currentHandler = electron.handlers.get(WELCOME_IPC.start)!
-    await expect(previousHandler(previousSender)).rejects.toThrow('unowned frame')
-    await expect(currentHandler(previousSender)).rejects.toThrow('unowned frame')
+    await openWelcomeWindow(resolveDesktopLocale('en'), { ...operations, loginG1brain: currentLogin })
+    const currentHandler = electron.handlers.get(WELCOME_IPC.g1brainLogin)!
+    await expect(previousHandler(previousSender, { username: 'admin', password: 'test' })).rejects.toThrow('unowned frame')
+    await expect(currentHandler(previousSender, { username: 'admin', password: 'test' })).rejects.toThrow('unowned frame')
     previous.once.mock.calls[0]![1]()
-    expect(electron.handlers.get(WELCOME_IPC.start)).toBe(currentHandler)
-    await currentHandler({ sender: current.webContents, senderFrame: current.webContents.mainFrame })
-    expect(currentStart).toHaveBeenCalledOnce()
-    expect(previousStart).not.toHaveBeenCalled()
+    expect(electron.handlers.get(WELCOME_IPC.g1brainLogin)).toBe(currentHandler)
+    await currentHandler({ sender: current.webContents, senderFrame: current.webContents.mainFrame }, { username: 'admin', password: 'test' })
+    expect(currentLogin).toHaveBeenCalledOnce()
+    expect(previousLogin).not.toHaveBeenCalled()
     current.once.mock.calls[0]![1]()
     expect(electron.handlers.size).toBe(0)
   })
@@ -183,7 +166,7 @@ describe('desktop welcome window', () => {
   it('shows the entry after logout only without a separately configured API key', () => {
     expect(needsWelcome({ loggedIn: true, hasApiKey: false })).toBe(false)
     expect(needsWelcome({ loggedIn: false, hasApiKey: false })).toBe(true)
-    expect(needsWelcome({ loggedIn: false, hasApiKey: true })).toBe(false)
+    expect(needsWelcome({ loggedIn: false, hasApiKey: true })).toBe(true)
     expect(needsWelcome({ loggedIn: true, hasApiKey: true })).toBe(false)
   })
 })

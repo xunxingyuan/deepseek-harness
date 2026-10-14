@@ -1,4 +1,3 @@
-import type { SignInAttemptId } from '@deepseek-ai/dsh-deepseek-account/types'
 /** Native welcome window and its presentation-only renderer. */
 
 import { join } from 'node:path'
@@ -53,7 +52,7 @@ let disposeActiveHandlers: (() => void) | undefined
  * Open the process's sole welcome window with desktop-owned operations.
  * Replaces IPC ownership immediately; the caller closes the previous native window.
  * @param locale - shell-owned localized copy.
- * @param operations - credential write and this-launch-only skip actions.
+ * @param operations - G1brain login and development-mode reads for this window.
  * @returns the visible window; a failed load destroys it before rejecting.
  */
 export async function openWelcomeWindow(locale: DesktopLocale, operations: WelcomeOperations): Promise<BrowserWindow> {
@@ -65,8 +64,9 @@ export async function openWelcomeWindow(locale: DesktopLocale, operations: Welco
     if (!active) return
     active = false
     for (const channel of [
-      WELCOME_IPC.analyticsEnabled, WELCOME_IPC.analytics, WELCOME_IPC.takeNotice, WELCOME_IPC.saveApiKey,
-      WELCOME_IPC.skip, WELCOME_IPC.start, WELCOME_IPC.cancel, WELCOME_IPC.copyLink,
+      WELCOME_IPC.g1brainLogin,
+      WELCOME_IPC.g1brainMode,
+      WELCOME_IPC.analyticsEnabled, WELCOME_IPC.analytics,
     ]) {
       ipcMain.removeHandler(channel)
     }
@@ -92,26 +92,16 @@ export async function openWelcomeWindow(locale: DesktopLocale, operations: Welco
       await operations.analytics?.(eventName, {})
     } else throw new Error('desktop welcome: invalid analytics event')
   })
-  ipcMain.handle(WELCOME_IPC.takeNotice, async (event) => { assertSender(event); return operations.takeNotice() })
-  ipcMain.handle(WELCOME_IPC.saveApiKey, async (event, value: unknown) => {
+  ipcMain.handle(WELCOME_IPC.g1brainMode, async (event) => { assertSender(event); return operations.g1brainMode() })
+  ipcMain.handle(WELCOME_IPC.g1brainLogin, async (event, input: unknown) => {
     assertSender(event)
-    if (typeof value !== 'string' || !/^[\x21-\x7e]+$/.test(value)) return { ok: false }
-    return operations.saveApiKey(value)
-  })
-  ipcMain.handle(WELCOME_IPC.skip, async (event) => {
-    assertSender(event)
-    await operations.skip()
-  })
-  ipcMain.handle(WELCOME_IPC.start, async (event) => { assertSender(event); return operations.startSignIn() })
-  ipcMain.handle(WELCOME_IPC.cancel, async (event, id: unknown) => {
-    assertSender(event)
-    if (typeof id !== 'string') throw new Error('desktop welcome: invalid attempt')
-    return operations.cancelSignIn(id as SignInAttemptId)
-  })
-  ipcMain.handle(WELCOME_IPC.copyLink, async (event, id: unknown) => {
-    assertSender(event)
-    if (typeof id !== 'string') throw new Error('desktop welcome: invalid attempt')
-    return operations.copySignInLink(id as SignInAttemptId)
+    if (typeof input !== 'object' || input === null || Array.isArray(input)
+      || !('username' in input) || typeof input.username !== 'string'
+      || !('password' in input) || typeof input.password !== 'string'
+      || input.username.length > 256 || input.password.length > 4096) {
+      return { ok: false, reason: 'invalid-credentials' }
+    }
+    return operations.loginG1brain({ username: input.username, password: input.password })
   })
   window.once('closed', disposeHandlers)
   window.webContents.setWindowOpenHandler(() => ({ action: 'deny' }))

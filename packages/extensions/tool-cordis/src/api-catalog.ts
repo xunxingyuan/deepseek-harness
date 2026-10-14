@@ -5089,14 +5089,6 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export interface DeveloperMessage extends MessageBase {\n    readonly role: \'developer\';\n}',
   },
   {
-    name: 'DiffCallView',
-    declaration: 'export interface DiffCallView {\n    card: \'diff\';\n    title: string;\n    diffs: FileDiff[];\n    locations?: FileLocation[];\n}',
-  },
-  {
-    name: 'DiffResultView',
-    declaration: 'export interface DiffResultView {\n    card: \'diff\';\n    title?: string;\n    diffs: FileDiff[];\n}',
-  },
-  {
     name: 'DirectoryEntry',
     declaration: 'export interface DirectoryEntry {\n    name: string;\n    path: string;\n    hidden: boolean;\n}',
   },
@@ -5241,14 +5233,6 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export interface FileBlock {\n    type: \'file\';\n    attachment: FileAttachmentRef;\n}',
   },
   {
-    name: 'FileDiff',
-    declaration: 'export interface FileDiff {\n    path: string;\n    oldText: string | null;\n    newText: string;\n}',
-  },
-  {
-    name: 'FileLocation',
-    declaration: 'export interface FileLocation {\n    path: string;\n    line?: number;\n}',
-  },
-  {
     name: 'FileReferenceCandidate',
     declaration: 'export interface FileReferenceCandidate {\n    path: string;\n    kind: \'file\' | \'directory\';\n}',
   },
@@ -5319,14 +5303,6 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'GenerateOptions',
     declaration: 'export interface GenerateOptions {\n    provider: string;\n    model: string;\n    reasoningEffort?: ReasoningEffortId;\n    messages: RequestMessage[];\n    system?: string;\n    tools?: ToolSchema[];\n    toolHistory?: ToolHistory;\n    temperature?: number;\n    maxTokens?: number;\n    stop?: string[];\n    signal?: AbortSignal;\n    sessionId?: Branded<\'SessionId\'>;\n    purpose?: \'compaction\' | \'session-title\';\n}',
-  },
-  {
-    name: 'GenericCallView',
-    declaration: 'export interface GenericCallView {\n    card: \'generic\';\n    title: string;\n    kind?: ToolCallKind;\n    rawInput?: unknown;\n    content?: ContentBlock[];\n    locations?: FileLocation[];\n}',
-  },
-  {
-    name: 'GenericResultView',
-    declaration: 'export interface GenericResultView {\n    card: \'generic\';\n    title?: string;\n    content?: ContentBlock[];\n}',
   },
   {
     name: 'GoalActivation',
@@ -6277,16 +6253,8 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export type QueueAction = {\n    readonly kind: \'edit\';\n    readonly content: readonly TextBlock[];\n} | {\n    readonly kind: \'remove\';\n} | {\n    readonly kind: \'steer\';\n};',
   },
   {
-    name: 'ReadFileLine',
-    declaration: 'export interface ReadFileLine {\n    number: number;\n    text: string;\n}',
-  },
-  {
     name: 'ReadOnlyReason',
     declaration: 'export type ReadOnlyReason = \'management-required\' | \'unaddressable\';',
-  },
-  {
-    name: 'ReadResultView',
-    declaration: 'export interface ReadResultView {\n    card: \'read\';\n    title?: string;\n    path: string;\n    offset: number;\n    lines: ReadFileLine[];\n    totalLines: number;\n    lang?: string;\n    content?: ContentBlock[];\n}',
   },
   {
     name: 'ReasoningBlock',
@@ -6523,26 +6491,6 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'ScopeKey',
     declaration: 'export type ScopeKey = object;',
-  },
-  {
-    name: 'SearchFileMatches',
-    declaration: 'export interface SearchFileMatches {\n    path: string;\n    matches: SearchLineMatch[];\n}',
-  },
-  {
-    name: 'SearchLineMatch',
-    declaration: 'export interface SearchLineMatch {\n    lineNumber: number;\n    line: string;\n}',
-  },
-  {
-    name: 'SearchMatchesResultView',
-    declaration: 'export interface SearchMatchesResultView {\n    card: \'search\';\n    shape: \'matches\';\n    title?: string;\n    files: SearchFileMatches[];\n    truncated: boolean;\n    total: number;\n}',
-  },
-  {
-    name: 'SearchPathsResultView',
-    declaration: 'export interface SearchPathsResultView {\n    card: \'search\';\n    shape: \'paths\';\n    title?: string;\n    paths: string[];\n    truncated: boolean;\n    total: number;\n}',
-  },
-  {
-    name: 'SearchResultView',
-    declaration: 'export type SearchResultView = SearchMatchesResultView | SearchPathsResultView;',
   },
   {
     name: 'SendTeamMessageRequest',
@@ -7637,10 +7585,6 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export interface TerminalBackendSpawnSpec extends TerminalSpawnRequest {\n    sessionId: TerminalSessionIdValue;\n    owner: Agent;\n    signal?: AbortSignal;\n}',
   },
   {
-    name: 'TerminalCallView',
-    declaration: 'export interface TerminalCallView {\n    card: \'terminal\';\n    title: string;\n    description?: string;\n    cwd?: string;\n}',
-  },
-  {
     name: 'TerminalCreateRequest',
     declaration: 'export interface TerminalCreateRequest {\n    readonly shellPath?: string;\n    readonly id: WebTerminalId;\n    readonly cols: number;\n    readonly rows: number;\n}',
   },
@@ -7659,10 +7603,6 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'TerminalReadResult',
     declaration: 'export interface TerminalReadResult {\n    text: string;\n    totalLines: number;\n    lineBegin: number;\n    lineEnd: number;\n    truncated: boolean;\n}',
-  },
-  {
-    name: 'TerminalResultView',
-    declaration: 'export interface TerminalResultView {\n    card: \'terminal\';\n    title?: string;\n    output?: string;\n    exitCode?: number;\n    signal?: string;\n}',
   },
   {
     name: 'TerminalRetentionFrame',
@@ -7773,20 +7713,8 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export interface ToolCallInput {\n    tool: string;\n    tool_use_id: string;\n    agentId?: string;\n    [argument: string]: unknown;\n}',
   },
   {
-    name: 'ToolCallKind',
-    declaration: 'export type ToolCallKind = \'read\' | \'edit\' | \'delete\' | \'move\' | \'search\' | \'execute\' | \'fetch\' | \'other\';',
-  },
-  {
     name: 'ToolCallResult',
     declaration: 'export type ToolCallResult = {\n    deny: string;\n    result?: undefined;\n    isError?: undefined;\n} | {\n    result: unknown;\n    isError?: true;\n    deny?: undefined;\n};',
-  },
-  {
-    name: 'ToolCallView',
-    declaration: 'export type ToolCallView = GenericCallView | TerminalCallView | DiffCallView;',
-  },
-  {
-    name: 'ToolDefinition',
-    declaration: 'export interface ToolDefinition extends ToolSchema {\n    readonly output: ToolOutputDefinition;\n    execute(args: unknown, exec: ToolRunContext): Promise<unknown>;\n    projectContent?(exec: Readonly<ToolExecution>, result: Readonly<ToolExecutionResult>): ContentBlock[] | undefined;\n    finalizeContent?(exec: Readonly<ToolExecution>, result: Readonly<ToolExecutionResult>): ContentBlock[] | undefined;\n    timeoutMs?: number;\n    isConcurrencySafe?(args: unknown): boolean;\n    presentCall?(args: unknown): ToolCallView | undefined;\n    presentResult?(args: unknown, result: ToolResult): ToolResultView | undefined;\n}',
   },
   {
     name: 'ToolDispatchExecution',
@@ -7845,10 +7773,6 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export interface ToolMessageSource {\n    kind: \'tool\';\n    callId: ToolCallId;\n}',
   },
   {
-    name: 'ToolOutputDefinition',
-    declaration: 'export interface ToolOutputDefinition {\n    readonly schema: JsonSchemaNode;\n    render(args: unknown, value: JsonValue): ContentBlock[];\n    presentationMeta?(args: unknown, value: JsonValue): JsonValue;\n}',
-  },
-  {
     name: 'ToolPresentationMode',
     declaration: 'export type ToolPresentationMode = \'native\' | \'ptc\' | \'both\';',
   },
@@ -7865,16 +7789,8 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export interface ToolRestriction {\n    readonly allow?: readonly string[];\n    readonly deny?: readonly string[];\n}',
   },
   {
-    name: 'ToolResult',
-    declaration: 'export interface ToolResult {\n    content: ContentBlock[];\n    isError: boolean;\n    meta?: JsonValue;\n}',
-  },
-  {
     name: 'ToolResultMessage',
     declaration: 'export interface ToolResultMessage extends MessageBase {\n    readonly role: \'tool\';\n    readonly source: ToolMessageSource;\n    readonly toolCallId: ToolCallId;\n    readonly isError?: boolean;\n}',
-  },
-  {
-    name: 'ToolResultView',
-    declaration: 'export type ToolResultView = GenericResultView | TerminalResultView | DiffResultView | SearchResultView | ReadResultView | WebResultView;',
   },
   {
     name: 'ToolRunContext',
@@ -8117,10 +8033,6 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export interface WebFetchResult {\n    readonly url: string;\n    readonly statusCode: number;\n    readonly body: WebFetchBody;\n    readonly truncated: boolean;\n}',
   },
   {
-    name: 'WebFetchResultView',
-    declaration: 'export interface WebFetchResultView {\n    card: \'web\';\n    kind: \'fetch\';\n    title?: string;\n    url: string;\n    statusCode: number;\n    truncated: boolean;\n}',
-  },
-  {
     name: 'WebhookDeliveryId',
     declaration: 'export type WebhookDeliveryId = Branded<\'WebhookDeliveryId\'>;',
   },
@@ -8153,10 +8065,6 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export type WebhookSourceId = Branded<\'WebhookSourceId\'>;',
   },
   {
-    name: 'WebResultView',
-    declaration: 'export type WebResultView = WebSearchResultView | WebFetchResultView;',
-  },
-  {
     name: 'WebRoute',
     declaration: 'export interface WebRoute {\n    kind: WebRouteKind;\n    path: string;\n    handler: (req: IncomingMessage, res: ServerResponse) => void | Promise<void>;\n}',
   },
@@ -8177,16 +8085,8 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export interface WebSearchResult {\n    readonly content?: string;\n    readonly sources: readonly WebSearchSource[];\n    readonly truncated: boolean;\n}',
   },
   {
-    name: 'WebSearchResultView',
-    declaration: 'export interface WebSearchResultView {\n    card: \'web\';\n    kind: \'search\';\n    title?: string;\n    sources: WebSource[];\n    answer?: string;\n    truncated: boolean;\n}',
-  },
-  {
     name: 'WebSearchSource',
     declaration: 'export interface WebSearchSource {\n    readonly url: string;\n    readonly title?: string;\n    readonly snippet?: string;\n    readonly publishedAt?: string;\n}',
-  },
-  {
-    name: 'WebSource',
-    declaration: 'export interface WebSource {\n    url: string;\n    title?: string;\n    snippet?: string;\n    publishedAt?: string;\n}',
   },
   {
     name: 'WebTerminalId',

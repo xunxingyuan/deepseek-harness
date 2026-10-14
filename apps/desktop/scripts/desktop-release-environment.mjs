@@ -1,4 +1,5 @@
 /** Resolve public release identifiers supplied by the packaging environment. */
+import { DESKTOP_APP_ID } from './desktop-brand.mjs'
 
 /** Environment variable that supplies the Electron application identifier. */
 export const DESKTOP_APP_ID_ENV = 'DSH_DESKTOP_APP_ID'
@@ -56,15 +57,16 @@ export function resolveNpmRegistry(env) {
 }
 
 /**
- * Resolve and validate the application identifier shared by every platform target.
+ * Resolve and validate the G1brain application identifier shared by every platform target.
  * @param {NodeJS.ProcessEnv} env - Packaging environment.
- * @returns {string} Reverse-DNS application identifier.
+ * @returns {string} Reverse-DNS application identifier; defaults to G1brain's distinct ID.
  */
 export function resolveDesktopAppId(env) {
-  const appId = requireEnvironmentValue(env, DESKTOP_APP_ID_ENV)
+  const appId = env[DESKTOP_APP_ID_ENV]?.trim() || DESKTOP_APP_ID
   if (!/^[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)+$/u.test(appId)) {
     throw new Error(`desktop release environment: ${DESKTOP_APP_ID_ENV} must be a reverse-DNS identifier`)
   }
+  if (appId === 'com.deepseek.dsh') throw new Error('desktop release environment: G1brain must not reuse the upstream Harness application identifier')
   return appId
 }
 

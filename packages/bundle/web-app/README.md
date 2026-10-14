@@ -58,6 +58,8 @@ Saved model selections override the composition default. The settings card accep
 
 The generated [configuration catalog](../../../docs/config-catalog.md#deepseek-aidsh-web-app) lists this runtime plugin's accepted fields and their JSDoc. The shipped composition inserts the `schedule` service row and the `ui-schedule` task page row, while the clock reading and the four reminder tools belong to the `standard`, `cordis`, and `ptc` presets. The `tool-subagent` and `tool-subagent-fork` rows in those presets deny the four tools, so a delegated child's scope never lists them.
 
+The desktop profile additionally enables the [G1brain Host integration](../../g1brain/integration/README.md) and [G1brain workbench panel](../../client/ui-g1brain/README.md) from this bundle; ordinary Web profiles keep both rows disabled.
+
 <a id="public-deployments"></a>
 ### Listening, trust, and public deployments
 

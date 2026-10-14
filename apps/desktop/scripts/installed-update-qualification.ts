@@ -3,6 +3,7 @@ import { createHash, randomBytes } from 'node:crypto'
 import { mkdir, mkdtemp, readFile, readdir, stat, writeFile } from 'node:fs/promises'
 import { dirname, join, resolve } from 'node:path'
 import { gt, valid } from 'semver'
+import { DESKTOP_APP_ID, DESKTOP_UPDATE_PREFIX } from './desktop-brand.mjs'
 
 /** Source identifiers exclude file contents, configuration values, and credentials. */
 export interface InstalledUpdateSource {
@@ -47,10 +48,10 @@ export async function createInstalledUpdateRun(
   const id = randomBytes(12).toString('hex')
   const run: InstalledUpdateRun = {
     schemaVersion: 1, id, root, createdAt: new Date().toISOString(), source, versions,
-    appId: `com.deepseek.dsh.qualification.q${id}`, productName: `DSH Update Test ${id}`,
+    appId: `${DESKTOP_APP_ID}.qualification.q${id}`, productName: `G1brain Update Test ${id}`,
     environment: 'test', origin: 'https://download-test.deepseek.com', bucket: 'bj-toc-download-test-1320056602',
-    feedKey: `dsh-desk/feeds/qualification/${id}/win-x64/nightly.yml`,
-    binPrefix: `dsh-desk/bin/qualification/${id}/win-x64`,
+    feedKey: `${DESKTOP_UPDATE_PREFIX}/feeds/qualification/${id}/win-x64/nightly.yml`,
+    binPrefix: `${DESKTOP_UPDATE_PREFIX}/bin/qualification/${id}/win-x64`,
   }
   await writeFile(join(root, 'run.json'), `${JSON.stringify(run, null, 2)}\n`, { flag: 'wx', mode: 0o600, flush: true })
   return run
@@ -76,9 +77,9 @@ export async function readInstalledUpdateRun(path: string): Promise<InstalledUpd
   if (row.schemaVersion !== 1 || typeof row.id !== 'string' || !/^[a-f0-9]{24}$/u.test(row.id)
     || row.root !== resolve(dirname(path)) || row.environment !== 'test'
     || row.origin !== 'https://download-test.deepseek.com' || row.bucket !== 'bj-toc-download-test-1320056602'
-    || row.appId !== `com.deepseek.dsh.qualification.q${row.id}` || row.productName !== `DSH Update Test ${row.id}`
-    || row.feedKey !== `dsh-desk/feeds/qualification/${row.id}/win-x64/nightly.yml`
-    || row.binPrefix !== `dsh-desk/bin/qualification/${row.id}/win-x64`
+    || row.appId !== `${DESKTOP_APP_ID}.qualification.q${row.id}` || row.productName !== `G1brain Update Test ${row.id}`
+    || row.feedKey !== `${DESKTOP_UPDATE_PREFIX}/feeds/qualification/${row.id}/win-x64/nightly.yml`
+    || row.binPrefix !== `${DESKTOP_UPDATE_PREFIX}/bin/qualification/${row.id}/win-x64`
     || !Array.isArray(row.versions) || row.versions.length !== 2 || row.versions.some(version => typeof version !== 'string')) {
     throw new Error('installed update: manifest identity, location, versions, or test destination changed')
   }

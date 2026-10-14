@@ -84,9 +84,9 @@ describe.skipIf(!existsSync(preload('preload-app')))('built sandboxed Desktop pr
       expect(send).toHaveBeenCalledWith('dsh-desktop:locale-changed', 'zh')
     } else {
       expect(exposed.has('dshWelcome')).toBe(true)
-      const bridge = exposed.get('dshWelcome') as { takeNotice(): Promise<unknown> }
-      void bridge.takeNotice()
-      expect(invoke).toHaveBeenCalledWith('dsh-welcome:take-notice')
+      const bridge = exposed.get('dshWelcome') as { g1brainMode(): Promise<unknown> }
+      void bridge.g1brainMode()
+      expect(invoke).toHaveBeenCalledWith('g1brain-welcome:mode')
     }
   })
 })
