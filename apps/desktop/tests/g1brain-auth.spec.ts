@@ -15,6 +15,27 @@ describe('G1brain desktop login', () => {
     expect(g1brainDevelopmentHostEnvironment({}, false, 'local-dev')).toEqual({})
     expect(g1brainDevelopmentHostEnvironment({}, true, 'oauth')).toEqual({})
   })
+  it.each(['win32', 'darwin'] as const)('connects an installed unsigned %s test package without shell configuration', async (platform) => {
+    const { createElectronBuilderConfig } = await import('../scripts/electron-builder-config.mjs')
+    const manifest = createElectronBuilderConfig({ DSH_DESKTOP_UNSIGNED: '1' }, platform, 'x64').extraMetadata
+    const auth = new G1brainAuth(() => ({}), vi.fn<typeof fetch>())
+    expect(await auth.login('admin', 'fixture-password')).toEqual({ ok: true, username: 'admin' })
+    expect(g1brainDevelopmentHostEnvironment({}, false, auth.mode, manifest)).toEqual({
+      G1BRAIN_BASE_URL: DEFAULT_G1BRAIN_DEV_BASE_URL,
+      G1BRAIN_LOCAL_USER_ID: 'developer',
+      G1BRAIN_LOCAL_CLIENT_ID: 'g1brain-web',
+      G1BRAIN_ALLOW_LOCAL_DEV: '1',
+      G1BRAIN_ALLOW_DEV_WRITES: '1',
+    })
+    expect(g1brainDevelopmentHostEnvironment({ G1BRAIN_BASE_URL: 'http://127.0.0.1:9000', G1BRAIN_ALLOW_DEV_WRITES: '0' }, false, auth.mode, manifest))
+      .toMatchObject({ G1BRAIN_BASE_URL: 'http://127.0.0.1:9000', G1BRAIN_ALLOW_DEV_WRITES: '0' })
+    expect(g1brainDevelopmentHostEnvironment({}, false, 'oauth', manifest)).toEqual({})
+  })
+
+  it.each([undefined, null, {}, { g1brainDevelopmentConnection: false }, { g1brainDevelopmentConnection: 'true' }])('requires an explicit test-package connection marker (%j)', (manifest) => {
+    expect(g1brainDevelopmentHostEnvironment({}, false, 'local-dev', manifest)).toEqual({})
+  })
+
   it('opens a development session without transmitting or retaining the password', async () => {
     const send = vi.fn<typeof fetch>()
     const auth = new G1brainAuth(() => ({}), send)

@@ -106,6 +106,7 @@ export function createElectronBuilderConfig(
     extraMetadata: {
       name: 'g1brainxdeepseek-desktop',
       dshDesktopAppId: appId,
+      ...unsigned ? { g1brainDevelopmentConnection: true } : {},
       ...policy === undefined ? {} : { dshMandatoryUpdatePolicy: policy },
       ...buildVersion === productVersion ? {} : { version: buildVersion },
       ...packaged === undefined ? {} : { dshBuildCommit: packaged.commit, dshBuildDirty: packaged.dirty },

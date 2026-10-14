@@ -23,7 +23,7 @@ kind: "package-reference"
 <a id="use-this-package"></a>
 ## 使用
 
-未打包的本地开发桌面版会提供 `G1BRAIN_BASE_URL`（`http://192.168.100.113:19091`）、`G1BRAIN_LOCAL_USER_ID`（`developer`）、`G1BRAIN_LOCAL_CLIENT_ID`（`g1brain-web`）、`G1BRAIN_ALLOW_LOCAL_DEV=1` 和 `G1BRAIN_ALLOW_DEV_WRITES=1`；环境变量可覆盖这些默认值。宿主会沿用旧客户端的 `X-User-Id`、`X-Client-Id` 请求头；此测试身份与登录时输入的用户名无关。因此，仅未打包开发配置明确启用写入，并不代表登录用户的真实授权。其他部署须自行配置服务地址和认证参数。OAuth 模式需设置 `G1BRAIN_ACCESS_TOKEN` 与 `G1BRAIN_CLIENT_SECRET`（可选设置 `G1BRAIN_CLIENT_ID`）；宿主会发送 Basic 认证与 `Blade-Auth`。`G1BRAIN_TENANT_ID` 默认是 `000000`。没有对应认证参数时，插件仍启用但报告 `configured: false`，目录调用会明确报错。桌面登录暂未向宿主服务传递登录身份或 OAuth 令牌。
+本地开发桌面版或带有明确标记的未签名测试安装包会提供 `G1BRAIN_BASE_URL`（`http://192.168.100.113:19091`）、`G1BRAIN_LOCAL_USER_ID`（`developer`）、`G1BRAIN_LOCAL_CLIENT_ID`（`g1brain-web`）、`G1BRAIN_ALLOW_LOCAL_DEV=1` 和 `G1BRAIN_ALLOW_DEV_WRITES=1`；环境变量可覆盖这些默认值。宿主会沿用旧客户端的 `X-User-Id`、`X-Client-Id` 请求头；此测试身份与登录时输入的用户名无关。开发和未签名测试配置均启用写入，并不代表登录用户的真实授权。其他部署须自行配置服务地址和认证参数。OAuth 模式需设置 `G1BRAIN_ACCESS_TOKEN` 与 `G1BRAIN_CLIENT_SECRET`（可选设置 `G1BRAIN_CLIENT_ID`）；宿主会发送 Basic 认证与 `Blade-Auth`。`G1BRAIN_TENANT_ID` 默认是 `000000`。没有对应认证参数时，插件仍启用但报告 `configured: false`，目录调用会明确报错。桌面登录暂未向宿主服务传递登录身份或 OAuth 令牌。
 
 工作台为新的顶层会话调用 `bindSession`。宿主校验所选目录就是该会话的工作区，并将完整目标保存于仅所有者可读写的私有绑定文件。46 个工具只安装在对应智能体范围；恢复智能体时重新读取绑定。工具执行时再次检查会话、目标、原始输入结构和目录范围。写入必须提供 `confirm=true`。7 种新增类工具各自在首次调用时请求用户授权：同一种工具在当前绑定会话内最多复用 100 次、有效 30 分钟；重启宿主后失效，换一种新增工具则重新询问。更新、删除、上传、文档处理任务提交/取消和整包导入仍逐次审批。上传还须明确列出文件并逐一预检路径。旧版的 5 个智能体管理工具有意不开放。
 

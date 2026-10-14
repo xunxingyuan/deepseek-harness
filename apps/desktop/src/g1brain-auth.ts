@@ -6,21 +6,25 @@ import { sm2 } from 'sm-crypto'
 
 const DEFAULT_PUBLIC_KEY = '0445d8d7059501ed8f96f3b8baa4215bd215ef1e67a923a73da60939984384d979c3025ba7ee4340e1bec0817a19636cadea7c34e80155ee55476fdeb62465199a'
 
-/** Existing G1brain development API, used only by an unpackaged local-development desktop. */
+/** Existing G1brain API used by local development and explicitly marked unsigned test packages. */
 export const DEFAULT_G1BRAIN_DEV_BASE_URL = 'http://192.168.100.113:19091'
 
-/** Supply explicit read-only development API identity to an unpackaged Desktop Host.
+/** Supply the development API identity to a local-development or unsigned-test Desktop Host.
  * @param environment - inherited desktop environment; explicit overrides win.
  * @param development - whether the Electron app is unpackaged.
  * @param mode - selected G1brain sign-in mode.
- * @returns development-only Host environment values, or no additions in packaged/OAuth mode.
+ * @param manifest - application metadata; unsigned test packages explicitly enable the development connection.
+ * @returns development Host environment values, or no additions for ordinary packaged/OAuth mode.
  */
 export function g1brainDevelopmentHostEnvironment(
   environment: NodeJS.ProcessEnv,
   development: boolean,
   mode: 'local-dev' | 'oauth',
+  manifest?: unknown,
 ): NodeJS.ProcessEnv {
-  if (!development || mode !== 'local-dev') return {}
+  const testPackage = typeof manifest === 'object' && manifest !== null
+    && 'g1brainDevelopmentConnection' in manifest && manifest.g1brainDevelopmentConnection === true
+  if ((!development && !testPackage) || mode !== 'local-dev') return {}
   return {
     G1BRAIN_BASE_URL: environment.G1BRAIN_BASE_URL?.trim() || DEFAULT_G1BRAIN_DEV_BASE_URL,
     G1BRAIN_LOCAL_USER_ID: environment.G1BRAIN_LOCAL_USER_ID?.trim() || 'developer',

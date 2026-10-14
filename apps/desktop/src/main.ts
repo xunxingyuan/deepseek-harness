@@ -323,6 +323,8 @@ async function main(): Promise<void> {
     return result.environment
   })
   let hostEnvironment: NodeJS.ProcessEnv = process.env
+  const manifest: unknown = JSON.parse(await readFile(join(app.getAppPath(), 'package.json'), 'utf8'))
+  if (typeof manifest !== 'object' || manifest === null) throw new Error('desktop policy: invalid application manifest')
   const g1brainAuth = new G1brainAuth(
     () => hostEnvironment,
     (input, init) => net.fetch(input instanceof URL ? input.toString() : input, init),
@@ -432,7 +434,7 @@ async function main(): Promise<void> {
     const host = new DesktopHostProcess(resources.node, resources.dsh, activeProject,
       hostInspectPort, {
         ...hostEnvironment,
-        ...g1brainDevelopmentHostEnvironment(hostEnvironment, development, g1brainAuth.mode),
+        ...g1brainDevelopmentHostEnvironment(hostEnvironment, development, g1brainAuth.mode, manifest),
         DSH_CLIENT_VERSION: desktopClientVersion(),
       }, onFailure,
       primaryRuntime,
@@ -1216,8 +1218,6 @@ async function main(): Promise<void> {
   })
 
   mainWindow = createMainWindow()
-  const manifest: unknown = JSON.parse(await readFile(join(app.getAppPath(), 'package.json'), 'utf8'))
-  if (typeof manifest !== 'object' || manifest === null) throw new Error('desktop policy: invalid application manifest')
   const developmentPolicy = app.isPackaged ? undefined : process.env.DSH_DESKTOP_MANDATORY_UPDATE_CONFIG
   const policyInput: unknown = app.isPackaged
     ? ('dshMandatoryUpdatePolicy' in manifest ? manifest.dshMandatoryUpdatePolicy : undefined)

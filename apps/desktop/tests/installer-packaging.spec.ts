@@ -76,6 +76,7 @@ describe('installer preparation preserves application dependencies', () => {
     }, 'win32', 'x64')
     expect(config.artifactName).toBe('g1brainxdeepseek-${version}-${os}-${arch}-unsigned.${ext}')
     expect(config.extraMetadata).not.toHaveProperty('dshMandatoryUpdatePolicy')
+    expect(config.extraMetadata.g1brainDevelopmentConnection).toBe(true)
   })
 
   it('builds an unsigned macOS DMG without signing, notarization, or update metadata', async () => {
@@ -89,6 +90,7 @@ describe('installer preparation preserves application dependencies', () => {
     expect(config.dmg.sign).toBe(false)
     expect(config.publish).toBeNull()
     expect(config.extraMetadata).not.toHaveProperty('dshMandatoryUpdatePolicy')
+    expect(config.extraMetadata.g1brainDevelopmentConnection).toBe(true)
   })
 
   it('packages every preload entry point the shell loads', async () => {
@@ -112,6 +114,7 @@ describe('installer preparation preserves application dependencies', () => {
       APPLE_KEYCHAIN_PROFILE: 'installer-test',
     }, 'darwin', 'arm64')
     const packaged = new Set(config.files.filter((entry): entry is string => typeof entry === 'string'))
+    expect(config.extraMetadata).not.toHaveProperty('g1brainDevelopmentConnection')
     for (const name of referenced) expect(packaged.has(`lib/${name}`)).toBe(true)
   })
 })

@@ -49,6 +49,7 @@ const harness = await vi.hoisted(async () => {
   let quitCompleted = deferred()
   let policyBlocked = deferred()
   let embeddedPolicy: unknown
+  let embeddedDevelopmentConnection: unknown
   let closeWindowsOnQuit = false
   let updateState: DesktopUpdateState = { phase: 'idle' }
   let platformDisposeDeferred: ReturnType<typeof deferred> | undefined
@@ -229,6 +230,8 @@ const harness = await vi.hoisted(async () => {
     get policyBlocked() { return policyBlocked },
     get embeddedPolicy() { return embeddedPolicy },
     set embeddedPolicy(value: unknown) { embeddedPolicy = value },
+    get embeddedDevelopmentConnection() { return embeddedDevelopmentConnection },
+    set embeddedDevelopmentConnection(value: unknown) { embeddedDevelopmentConnection = value },
     nextNavigation() { navigated = deferred(); return navigated.promise },
     nextHostStart() { hostStarted = deferred(); return hostStarted.promise },
     deferPlatformDispose() { platformDisposeDeferred = deferred(); return platformDisposeDeferred },
@@ -259,6 +262,7 @@ const harness = await vi.hoisted(async () => {
       navigated = deferred(); dialogShown = deferred(); quitCompleted = deferred()
       policyBlocked = deferred()
       embeddedPolicy = undefined
+      embeddedDevelopmentConnection = undefined
       platformDisposeDeferred = undefined
       platformCloseDeferred = undefined
     },
@@ -307,7 +311,8 @@ vi.mock('node:fs/promises', async (importOriginal) => {
   const original = await importOriginal<typeof import('node:fs/promises')>()
   return { ...original, readFile: vi.fn((path: Parameters<typeof original.readFile>[0], encoding?: 'utf8') => {
     if (path === join('desktop-test-app', 'package.json')) {
-      return Promise.resolve(JSON.stringify({ dshDesktopAppId: 'com.deepseek.dsh', dshMandatoryUpdatePolicy: harness.embeddedPolicy }))
+      return Promise.resolve(JSON.stringify({ dshDesktopAppId: 'com.deepseek.dsh', dshMandatoryUpdatePolicy: harness.embeddedPolicy,
+        g1brainDevelopmentConnection: harness.embeddedDevelopmentConnection }))
     }
     return encoding === undefined ? original.readFile(path) : original.readFile(path, encoding)
   }) }
@@ -375,11 +380,12 @@ vi.mock('../src/welcome-backend.ts', () => ({
 }))
 
 // These shell lifecycle cases begin after G1brain login; credential-entry behavior has its own tests.
-vi.mock('../src/g1brain-auth.ts', () => ({ G1brainAuth: class {
-  get signedIn() { return true }
-  get mode() { return 'local-dev' }
-  async login(username: string) { return { ok: true, username } }
-}, g1brainDevelopmentHostEnvironment: () => ({}) }))
+vi.mock('../src/g1brain-auth.ts', async importOriginal => ({
+  ...await importOriginal<typeof import('../src/g1brain-auth.ts')>(), G1brainAuth: class {
+    get signedIn() { return true }
+    get mode() { return 'local-dev' }
+    async login(username: string) { return { ok: true, username } }
+  } }))
 
 function invoke(channel: string, origin = channel === DESKTOP_IPC.boot ? 'app' : 'shell', ...args: unknown[]): unknown {
   const handler = harness.handlers.get(channel)
@@ -448,6 +454,29 @@ afterEach(async () => {
 })
 
 describe('desktop main startup', () => {
+  it.each([true, undefined, false])('supplies the development connection only to an explicitly marked installed test package (%s)', async (marker) => {
+    const names = ['G1BRAIN_BASE_URL', 'G1BRAIN_LOCAL_USER_ID', 'G1BRAIN_LOCAL_CLIENT_ID', 'G1BRAIN_ALLOW_LOCAL_DEV', 'G1BRAIN_ALLOW_DEV_WRITES']
+    for (const name of names) {
+      vi.stubEnv(name, undefined)
+    }
+    harness.embeddedDevelopmentConnection = marker
+    await readyForUpdate()
+    const environment = harness.hosts[0]!.environment!
+    if (marker === true) {
+      expect(Object.fromEntries(names.map(name => [name, environment[name]]))).toEqual({
+        G1BRAIN_BASE_URL: 'http://192.168.100.113:19091',
+        G1BRAIN_LOCAL_USER_ID: 'developer',
+        G1BRAIN_LOCAL_CLIENT_ID: 'g1brain-web',
+        G1BRAIN_ALLOW_LOCAL_DEV: '1',
+        G1BRAIN_ALLOW_DEV_WRITES: '1',
+      })
+    } else {
+      expect(environment.G1BRAIN_BASE_URL).toBeUndefined()
+      expect(environment.G1BRAIN_ALLOW_LOCAL_DEV).toBeUndefined()
+      expect(environment.G1BRAIN_ALLOW_DEV_WRITES).toBeUndefined()
+    }
+  })
+
   it('passes an isolated default home to the packaged Host', async () => {
     vi.stubEnv('DSH_HOME', undefined)
     await readyForUpdate()
