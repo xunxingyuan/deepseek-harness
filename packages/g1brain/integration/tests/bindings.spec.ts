@@ -27,7 +27,7 @@ function fixture() {
 describe('G1brain Session bindings', () => {
   it('persists a canonical target and refuses a different target for the same Session', async () => {
     const { directory, session, store, target } = fixture()
-    const canonical = { ...target, folderPath: realpathSync(directory) }
+    const canonical = { ...target, folderPath: realpathSync.native(directory) }
     expect(await store.bind(session, target)).toEqual(canonical)
     expect(await store.load(session)).toEqual(canonical)
     await expect(store.bind(session, { ...target, createOntologyCollectionName: '另一集合' }))
