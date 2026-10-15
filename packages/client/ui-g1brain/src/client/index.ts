@@ -13,17 +13,12 @@ import { G1brainHome, type G1brainHomeInjected } from './G1brainHome.tsx'
 import { G1brainBrandMark, G1brainBrandName } from './G1brainBrand.tsx'
 import { G1brainIcon } from './G1brainIcon.tsx'
 import { en, zh, type G1brainKey } from './locales.ts'
+import { prepareG1brainSession } from './preparation.ts'
 
 declare module '@deepseek-ai/dsh-client-ui-slots' {
   interface LocaleNamespaceMap {
     /** G1brain desktop workbench copy. */
     g1brain: G1brainKey
-  }
-}
-
-declare module '@deepseek-ai/dsh-api-session-controller/client' {
-  interface SessionReferenceSourceMap {
-    g1brainPreparation: unknown
   }
 }
 
@@ -67,21 +62,7 @@ export function apply(ctx: Context): void {
         loadCatalog,
         loadDomains,
         pickDirectory: () => desktopPicker?.pick() ?? ctx.uiWorkspace.pickDirectory(),
-        openSession: async ({ target, prompt }) => {
-          const workspace = await ctx.workspaces.create({ path: target.folderPath })
-          const sessionId = await ctx.sessions.create({ workspaceId: workspace.workspaceId })
-          const result = await ctx.remote.g1brain.bindSession({ sessionId, target })
-          if (!result.ok) throw new Error(result.error.message)
-          const reference = ctx.sessions.retain(sessionId, { source: 'g1brainPreparation' })
-          try {
-            if (ctx.conversation.input.requestDraftInitialization(reference.binding, { prompt }) !== 'applied') {
-              throw new Error('G1brain Session draft could not be prepared')
-            }
-            ctx.uiWorkspace.openSession(sessionId)
-          } finally {
-            reference.release()
-          }
-        },
+        openSession: input => prepareG1brainSession(ctx, input),
       }),
     }, G1brainHome)
     queueMicrotask(() => {

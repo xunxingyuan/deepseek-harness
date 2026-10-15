@@ -4,6 +4,7 @@ import { Button, Input } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { InjectFace, PropsLocale } from '@deepseek-ai/dsh-client-ui-slots'
 import type { G1brainCatalogItem, G1brainSessionTarget } from '@deepseek-ai/dsh-g1brain-integration/types'
 import css from './G1brainHome.module.css'
+import { G1brainPreparationError, type G1brainPreparationStage } from './preparation.ts'
 
 type Catalog = {
   readonly configured: boolean
@@ -105,7 +106,7 @@ export function G1brainHome({ t, loadCatalog, loadDomains, pickDirectory, openSe
   const [libraryExisting, setLibraryExisting] = useState('')
   const [directory, setDirectory] = useState('')
   const [busy, setBusy] = useState(false)
-  const [startError, setStartError] = useState(false)
+  const [startError, setStartError] = useState<G1brainPreparationStage | null>(null)
 
   useEffect(() => {
     let active = true
@@ -147,13 +148,14 @@ export function G1brainHome({ t, loadCatalog, loadDomains, pickDirectory, openSe
   const proceed = async () => {
     if (!ready) return
     setBusy(true)
-    setStartError(false)
+    setStartError(null)
     const prompt = [
       mode === 'new' ? t('promptNew', { name: target }) : t('promptOptimize', { name: target }),
       t('promptDomain', { name: domain }),
       libraryMode === 'new' ? t('promptLibraryNew', { name: library }) : t('promptLibraryExisting', { name: library }),
       t('promptSafety'),
       t('promptProcessing'),
+      t('promptLanguage'),
     ].join('\n')
     try {
       const binding: G1brainSessionTarget = {
@@ -165,8 +167,8 @@ export function G1brainHome({ t, loadCatalog, loadDomains, pickDirectory, openSe
         ...(libraryMode === 'new' ? { createDocumentLibraryName: library } : { documentLibraryName: library }),
       }
       await openSession({ target: binding, prompt })
-    } catch (_error) {
-      setStartError(true)
+    } catch (error) {
+      setStartError(error instanceof G1brainPreparationError ? error.stage : 'session')
     } finally {
       setBusy(false)
     }
@@ -238,8 +240,8 @@ export function G1brainHome({ t, loadCatalog, loadDomains, pickDirectory, openSe
           <section className={css.card} aria-labelledby="g1brain-directory">
             <div className={css.cardHeader}><span className={css.step}>03</span><div><h2 id="g1brain-directory">{t('sectionDirectory')}</h2><p>{t('sectionDirectoryHelp')}</p></div></div>
             <div className={css.directory}>
-              <label className={css.directoryField}>{t('directoryPath')}<Input value={directory} onChange={(event) => { setDirectory(event.target.value); setStartError(false) }} placeholder={t('directoryPathPlaceholder')} /></label>
-              <Button variant="outline" onClick={() => { void pickDirectory().then((path) => { if (path !== null) setDirectory(path) }).catch(() => { setStartError(true) }) }}>{t('pickDirectory')}</Button>
+              <label className={css.directoryField}>{t('directoryPath')}<Input value={directory} onChange={(event) => { setDirectory(event.target.value); setStartError(null) }} placeholder={t('directoryPathPlaceholder')} /></label>
+              <Button variant="outline" onClick={() => { void pickDirectory().then((path) => { if (path !== null) setDirectory(path) }).catch(() => { setStartError('directory') }) }}>{t('pickDirectory')}</Button>
             </div>
           </section>
         </div>
@@ -248,7 +250,8 @@ export function G1brainHome({ t, loadCatalog, loadDomains, pickDirectory, openSe
           <div><strong>{t('summary')}</strong><p>{target ? mode === 'new' ? t('summaryNew', { name: targetLabel }) : t('summaryOptimize', { name: targetLabel }) : t('summaryPending')} · {domain ? t('summaryDomain', { name: domainLabel }) : t('summaryPending')} · {library ? libraryMode === 'new' ? t('summaryLibraryNew', { name: library }) : t('summaryLibraryExisting', { name: library }) : t('summaryPending')} · {directory ? t('summaryDirectory', { name: directory }) : t('summaryPending')}</p><small>{t('draftNotice')}</small></div>
           <Button variant="primary" disabled={!ready} onClick={() => { void proceed() }}>{busy ? t('proceeding') : t('proceed')}</Button>
         </aside>
-        {startError && <p className={css.error} role="alert">{t('startError')}</p>}
+        {startError !== null && <p className={css.error} role="alert">{t(startError === 'directory' ? 'startDirectoryError'
+          : startError === 'binding' ? 'startBindingError' : startError === 'draft' ? 'startDraftError' : 'startError')}</p>}
       </>}
     </div>
   </main>

@@ -15,8 +15,8 @@
   en: 0d685fe89ebcee6b
   zh: 0c6d3f99579b1b17
 /g1brain-integration/use-this-package:
-  en: c164c2c23d0e4e9c
-  zh: f818ba0823fb903d
+  en: f9be4f81e61c14b5
+  zh: a674c17af49b2cd9
 /g1brain-integration/understand-the-package:
   en: 81011777c160a790
   zh: 078ef03539106300
@@ -26,6 +26,21 @@
 /g1brain-integration/model-experience:
   en: 215e7ba838619b7b
   zh: a311da3843709f90
+/g1brain-integration/model-experience/workflow-guidance:
+  en: d5fb4dad577182a2
+  zh: a4ce8534a972015c
+/g1brain-integration/model-experience/workflow-guidance/what-the-model-sees:
+  en: f5c7c32c27d2c1bb
+  zh: 6dd4db6f593406df
+/g1brain-integration/model-experience/workflow-guidance/what-the-model-sees/workflow-instruction:
+  en: b993834f54c32c72
+  zh: f48fb893c0adc139
+/g1brain-integration/model-experience/workflow-guidance/token-effect:
+  en: 4dfa0ba1f836e514
+  zh: 361a1d0e333eb0d2
+/g1brain-integration/model-experience/workflow-guidance/kv-cache-effect:
+  en: 277fab7be5fef270
+  zh: 1b9e75f9cfebddbd
 /g1brain-integration/model-experience/catalog-and-bound-session-tools:
   en: a9ca540b87c99cf4
   zh: 7bc0d09e41a3401a

@@ -89,6 +89,27 @@ describe('G1brain desktop integration', () => {
     expect(fetcher.mock.calls[0]?.[0].href).toContain('/domains?view=detail')
   })
 
+  it('explains read-only Sessions and user-language replies, and removes that guidance when unloaded', async () => {
+    clearAuthentication()
+    process.env.G1BRAIN_ALLOW_LOCAL_DEV = '1'
+    process.env.G1BRAIN_LOCAL_USER_ID = 'developer'
+    process.env.G1BRAIN_LOCAL_CLIENT_ID = 'g1brain-web'
+    const ctx = new Context()
+    contexts.push(ctx)
+    await ctx.plugin(SystemPrompt)
+    await ctx.plugin(ToolRuntime)
+    ctx.provide('sessions', { get: () => undefined } as never)
+    ctx.provide('agents', { get: () => undefined, list: () => [] } as never)
+    ctx.provide('approval', { request: async () => 'rejected' } as never)
+    const fiber = await ctx.plugin(G1brainIntegration, { baseUrl: 'http://127.0.0.1:18203/', clientId: 'client', tenantId: '000000', timeoutMs: 15000 })
+    const section = (await ctx.systemPrompt.assemble()).sections.find(item => item.name === 'g1brain:workflow')
+    expect(section?.text).toContain('Use Simplified Chinese for Chinese requests')
+    expect(section?.text).toContain('Ordinary Sessions provide discovery and search')
+    expect(section?.text).toContain('Do not interpret missing write tools as missing API credentials')
+    await fiber.dispose()
+    expect((await ctx.systemPrompt.assemble()).sections.some(item => item.name === 'g1brain:workflow')).toBe(false)
+  })
+
   it('rejects invalid catalog responses', async () => {
     clearAuthentication()
     process.env.G1BRAIN_ALLOW_LOCAL_DEV = '1'

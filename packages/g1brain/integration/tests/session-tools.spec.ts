@@ -139,6 +139,16 @@ describe('bound G1brain Session tools', () => {
     expect(fetcher).toHaveBeenCalledTimes(1)
   })
 
+  it('refuses to resume a bound Session with an inaccessible materials folder instead of silently losing its tools', async () => {
+    const { ctx, agent, service, session, materials } = await harness()
+    await service.bindSession({ sessionId: session.id, target: {
+      mode: 'new-ontology', folderPath: materials, createOntologyCollectionName: '测试本体',
+      createDomainName: '设备', createDocumentLibraryName: '测试资料库',
+    } })
+    rmSync(materials, { recursive: true })
+    await expect(ctx.serial('agent/created', { agent: { ...agent } as never, source: 'resume' })).rejects.toThrow()
+  })
+
   it('reuses one bounded approval for the same creation tool and target only', async () => {
     const { ctx, agent, service, session, materials, approval, fetcher } = await harness()
     await service.bindSession({ sessionId: session.id, target: {

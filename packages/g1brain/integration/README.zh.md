@@ -29,6 +29,8 @@ kind: "package-reference"
 
 文档处理沿用当前 G1brain 网页的 MD 接口：上传后先提交 `MD` 切片任务并确认成功，再提交 `CHUNK` 的关键词、向量化和索引操作。提交工具可选择绑定文档库内的全部现有文件，也可指定经过该库校验的文档 ID。7 个任务工具覆盖提交、当前/历史列表、详情、逐文件状态、限时等待与取消。列表和详情只返回摘要，避免大型任务占满模型上下文。
 
+绑定存储在 POSIX 上检查私有目录权限；Windows 依赖当前用户配置目录的 ACL，不以合成的 POSIX 权限位判断。目录匹配采用对应平台的路径比较规则，包括 Windows 盘符大小写。恢复智能体时若无法读取绑定或材料目录，会使初始化失败，而非悄悄退回只读工具。
+
 未绑定的普通会话可列出本体集合、领域、分类树节点、属性、关系定义与类型、实体和关系边；也可列出文档，执行混合检索、QA 检索、片段定位与片段列表查询。只有这些明确列出的只读工具全局开放；输入会校验，返回文本最多 32 KiB，超出时附截断提示。它们使用宿主配置的 G1brain 身份，而非桌面登录时经服务端验证的用户身份。
 
 <a id="understand-the-package"></a>
@@ -44,6 +46,34 @@ kind: "package-reference"
 
 <a id="model-experience"></a>
 ## 模型体验
+
+### 工作流指引
+
+#### 模型看到的内容
+
+固定的 `g1brain:workflow` 系统段加入以下文本。[录制的系统提示](../../../snapshots/session/g1brain-session-guidance/system-prompt.expected.md) 验证其插入位置。
+
+##### 工作流指令
+
+```markdown
+## G1brain workflow
+
+Reply in the language of the current user request, including progress updates, clarification questions, and the final result. Use Simplified Chinese for Chinese requests unless the user explicitly asks for another language.
+
+Use the available G1brain tools for ontology and document operations. Ordinary Sessions provide discovery and search; creation and updates require a G1brain build or improvement Session prepared with the selected ontology, domain, document library, and source folder.
+
+If write tools are absent, explain that this Session is read-only and direct the user to prepare a G1brain build or improvement Session. Do not interpret missing write tools as missing API credentials or ask the user to install another plugin.
+
+In a prepared Session, inspect the sources, propose a plan, and use the bound G1brain tools after the user approves the plan. Tool approval remains required for writes.
+```
+
+#### Token 影响
+
+配置完成的集成会在每次智能体请求中加入这段固定内容，不随资源目录大小变化。
+
+#### KV Cache 影响
+
+普通会话与准备会话使用相同段落；更新或启用集成时，其文本会改变系统前缀。
 
 ### 目录与绑定会话工具
 

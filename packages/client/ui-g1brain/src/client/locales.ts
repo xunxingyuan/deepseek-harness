@@ -69,7 +69,10 @@ export const zh = {
   draftNotice: '进入后会生成操作说明草稿；写入 G1brain 前仍需确认。',
   unavailable: '需要连接 G1brain 服务才能选择已有资源。',
   catalogError: '暂时无法读取 G1brain 目录，请检查连接后重试。',
-  startError: '无法打开材料目录，请重新选择或检查访问权限。',
+  startError: '无法创建会话，请重试',
+  startDirectoryError: '无法打开材料目录，请重新选择或检查访问权限',
+  startBindingError: '未能准备 G1brain 操作工具，请重试；若仍失败，请重启客户端',
+  startDraftError: '未能准备会话说明，请重试',
   promptNew: '请基于当前目录中的资料，为名为「{name}」的新本体制定抽取与构建方案。',
   promptOptimize: '请基于当前目录中的资料，为已有本体集合「{name}」制定优化方案。',
   promptDomain: '目标本体领域：「{name}」。',
@@ -77,6 +80,7 @@ export const zh = {
   promptLibraryExisting: '目标文档库：已有「{name}」。',
   promptSafety: '先盘点资料并引用证据；在我确认方案前，不要创建、上传、修改或删除 G1brain 中的数据。',
   promptProcessing: '方案获批并上传资料后，先提交 MD 切片任务并确认成功，再提交文件片段的关键词、向量化和索引创建任务；处理完成前不要宣称文档可检索。',
+  promptLanguage: '请使用我当前提问的语言回复，包括过程说明、澄清问题和最终结果。中文提问使用简体中文，除非我明确要求其他语言。',
 } as const
 
 /** English copy, key-identical to the Chinese dictionary. */
@@ -150,7 +154,10 @@ export const en: Record<keyof typeof zh, string> = {
   draftNotice: 'A work brief will be drafted in the Session. G1brain writes still require confirmation.',
   unavailable: 'Connect G1brain to select an existing resource.',
   catalogError: 'Could not read the G1brain catalog. Check the connection and retry.',
-  startError: 'Could not open the source folder. Choose it again or check access.',
+  startError: 'Could not create the Session. Please retry.',
+  startDirectoryError: 'Could not open the source folder. Choose it again or check access.',
+  startBindingError: 'Could not prepare G1brain tools. Retry, or restart the app if it still fails.',
+  startDraftError: 'Could not prepare the Session brief. Please retry.',
   promptNew: 'Please inspect the current folder and plan extraction and construction of a new ontology named “{name}”.',
   promptOptimize: 'Please inspect the current folder and plan improvements to the existing ontology collection “{name}”.',
   promptDomain: 'Target ontology domain: “{name}”.',
@@ -158,6 +165,7 @@ export const en: Record<keyof typeof zh, string> = {
   promptLibraryExisting: 'Target document library: existing “{name}”.',
   promptSafety: 'First inventory the sources and cite evidence. Do not create, upload, modify, or delete G1brain data before I approve the plan.',
   promptProcessing: 'After the plan is approved and files are uploaded, submit an MD slicing task and confirm success before submitting chunk keyword, vectorization, and index tasks. Do not claim documents are searchable until processing finishes.',
+  promptLanguage: 'Reply in the language of my current request, including progress updates, clarification questions, and the final result. Use Simplified Chinese when I ask in Chinese, unless I explicitly request another language.',
 }
 
 /** Typed workbench locale key. */

@@ -25,7 +25,7 @@ function mount(language = 'zh-CN') {
 describe('G1brain welcome form', () => {
   it.each(['zh-CN', 'en'])('shows only G1brain sign-in in %s', async (language) => {
     const view = mount(language)
-    await vi.waitFor(() => expect(document.getElementById('g1brain-dev-mode')).not.toBeNull())
+    await vi.waitFor(() => { expect(document.getElementById('g1brain-dev-mode')).not.toBeNull() })
     expect(document.title).toBe('G1brain × DeepSeek')
     expect(view.password.type).toBe('password')
     expect(document.getElementById('sign-in')).toBeNull()
@@ -45,8 +45,8 @@ describe('G1brain welcome form', () => {
     fireEvent.change(view.username, { target: { value: ' admin ' } })
     fireEvent.change(view.password, { target: { value: 'test-password' } })
     view.submit()
-    await vi.waitFor(() => expect(view.loginG1brain).toHaveBeenCalledExactlyOnceWith({ username: 'admin', password: 'test-password' }))
-    await vi.waitFor(() => expect(view.password.value).toBe(''))
+    await vi.waitFor(() => { expect(view.loginG1brain).toHaveBeenCalledExactlyOnceWith({ username: 'admin', password: 'test-password' }) })
+    await vi.waitFor(() => { expect(view.password.value).toBe('') })
   })
 
   it('blocks duplicate requests and displays a safe failure', async () => {
@@ -59,7 +59,7 @@ describe('G1brain welcome form', () => {
     expect(view.button.disabled).toBe(true)
     view.submit()
     expect(view.loginG1brain).toHaveBeenCalledTimes(1)
-    await act(async () => pending.resolve({ ok: false, reason: 'invalid-credentials' }))
+    await act(async () => { pending.resolve({ ok: false, reason: 'invalid-credentials' }) })
     expect(document.getElementById('g1brain-login-error')!.textContent).toBe(view.api.messages.g1brainLoginInvalid)
     expect(view.password.value).toBe('')
     expect(view.button.disabled).toBe(false)

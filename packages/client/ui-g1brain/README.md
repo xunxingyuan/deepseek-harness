@@ -25,6 +25,8 @@ The desktop profile opens this panel after sign-in. It diagrams connected ontolo
 
 The panel reads existing resource names through the Host's G1brain service. Without API credentials, the overview shows unavailable resources and the new-ontology action still opens a form where names and a local folder can prepare a Session; improvement stays unavailable. The source folder can be selected with the native chooser or entered as an absolute local path; Workspace creation validates it. **Open Harness Session** creates a fresh Session, binds its exact selected targets and folder in the Host, and prepares a draft brief asking for source inventory and a proposal. The brief also instructs the agent to confirm MD slicing and chunk/index processing before claiming uploaded files are searchable. Opening a Session does not create an ontology, upload a file, or submit a task by itself. The sidebar G1brain entry returns to the panel from a Session.
 
+The panel waits for the Session reference to be ready before preparing the draft and navigating. Failures preserve the form and distinguish directory access, Session creation, target binding, and draft initialization; retry after resolving the indicated step.
+
 <a id="understand-the-package"></a>
 ## Understand the package
 
@@ -43,7 +45,7 @@ The panel implementation is in `src/client/G1brainHome.tsx`. Resource catalogs a
 
 #### What the model sees
 
-The browser plugin registers no tools. A prepared draft becomes an ordinary user message only when the user submits it in the `Session`. The Host uses the durable binding to add scoped G1brain tools to that Session's agent; writes require explicit confirmation, with bounded same-tool approval reuse for creation and individual approval for other writes.
+The browser plugin registers no tools. A prepared draft becomes an ordinary user message only when the user submits it in the `Session`. It asks the model to follow the current request's language, including progress, questions, and the final result. The Host uses the durable binding to add scoped G1brain tools to that Session's agent; writes require explicit confirmation, with bounded same-tool approval reuse for creation and individual approval for other writes.
 
 #### Token effect
 

@@ -1,0 +1,14 @@
+version: 1
+scenario: g1brain-session-guidance
+profile: headless
+composition: g1brain-session-guidance
+recording: authored
+environment:
+  G1BRAIN_AUTH_MODE: local-dev
+  G1BRAIN_ALLOW_LOCAL_DEV: '1'
+  G1BRAIN_ALLOW_DEV_WRITES: '1'
+  G1BRAIN_LOCAL_USER_ID: developer
+  G1BRAIN_LOCAL_CLIENT_ID: g1brain-web
+header:
+  class: g1brain-session-guidance
+  pin: true

@@ -4,6 +4,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { G1brainHome, type G1brainHomeProps } from '../src/client/G1brainHome.tsx'
 import type {} from '../src/client/index.ts'
 import { zh, type G1brainKey } from '../src/client/locales.ts'
+import { G1brainPreparationError, type G1brainPreparationStage } from '../src/client/preparation.ts'
 
 afterEach(cleanup)
 
@@ -52,6 +53,7 @@ describe('G1brain landing page', () => {
     expect(call.prompt).toContain('设备本体')
     expect(call.prompt).toContain('在我确认方案前，不要创建、上传、修改或删除')
     expect(call.prompt).toContain('先提交 MD 切片任务并确认成功')
+    expect(call.prompt).toContain('中文提问使用简体中文')
   })
 
   it('selects existing ontology and library only when the service is configured', async () => {
@@ -109,6 +111,26 @@ describe('G1brain landing page', () => {
     await waitFor(() => { expect(loadDomains).toHaveBeenCalledWith('已有本体') })
     fireEvent.click(screen.getByRole('button', { name: zh.backToOverview }))
     expect(screen.getByRole('heading', { name: zh.overviewOntologies })).toBeTruthy()
+  })
+
+  it.each([
+    ['directory', zh.startDirectoryError], ['session', zh.startError],
+    ['binding', zh.startBindingError], ['draft', zh.startDraftError],
+  ] satisfies Array<[G1brainPreparationStage, string]>)('keeps the form and reports the failed %s operation accurately', async (stage, message) => {
+    const { openSession } = home(true)
+    openSession.mockRejectedValueOnce(new G1brainPreparationError(stage, new Error('fixture failure')))
+    await screen.findByText(zh.connected)
+    fireEvent.click(screen.getByRole('button', { name: zh.modeNew }))
+    fireEvent.change(screen.getByPlaceholderText(zh.ontologyNamePlaceholder), { target: { value: '周报本体' } })
+    fireEvent.change(screen.getByPlaceholderText(zh.domainNewPlaceholder), { target: { value: '周报领域' } })
+    fireEvent.change(screen.getByPlaceholderText(zh.libraryNamePlaceholder), { target: { value: '周报文档' } })
+    fireEvent.change(screen.getByLabelText(zh.directoryPath), { target: { value: 'C:\\Users\\lisa\\Downloads\\周报本体' } })
+    fireEvent.click(screen.getByRole('button', { name: zh.proceed }))
+    expect((await screen.findByRole('alert')).textContent).toBe(message)
+    expect(screen.getByDisplayValue('周报本体')).toBeTruthy()
+    expect(screen.getByDisplayValue('C:\\Users\\lisa\\Downloads\\周报本体')).toBeTruthy()
+    expect(openSession.mock.calls[0]?.[0].target.folderPath).toBe('C:\\Users\\lisa\\Downloads\\周报本体')
+    expect(screen.getByRole('button', { name: zh.proceed }).hasAttribute('disabled')).toBe(false)
   })
 
   it('can inspect a longer catalog and carry a selected document library into preparation', async () => {

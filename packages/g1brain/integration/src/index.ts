@@ -4,6 +4,7 @@ import { Buffer } from 'node:buffer'
 import { join } from 'node:path'
 import type { Context } from '@deepseek-ai/cordis'
 import type { Agent } from '@deepseek-ai/dsh-agent'
+import type {} from '@deepseek-ai/dsh-system-prompt'
 import { defineTool, type ToolExecutionInput } from '@deepseek-ai/dsh-tools'
 import { resolveDshHome } from '@deepseek-ai/dsh-home-paths'
 import { Remote, TypertRemoteService } from '@deepseek-ai/dsh-typert-protocol'
@@ -54,6 +55,14 @@ const REUSABLE_CREATE_TOOLS = new Set([
 ])
 const CREATE_GRANT_DURATION_MS = 30 * 60 * 1000
 const CREATE_GRANT_MAX_CALLS = 100
+
+const WORKFLOW_GUIDANCE = [
+  '## G1brain workflow',
+  'Reply in the language of the current user request, including progress updates, clarification questions, and the final result. Use Simplified Chinese for Chinese requests unless the user explicitly asks for another language.',
+  'Use the available G1brain tools for ontology and document operations. Ordinary Sessions provide discovery and search; creation and updates require a G1brain build or improvement Session prepared with the selected ontology, domain, document library, and source folder.',
+  'If write tools are absent, explain that this Session is read-only and direct the user to prepare a G1brain build or improvement Session. Do not interpret missing write tools as missing API credentials or ask the user to install another plugin.',
+  'In a prepared Session, inspect the sources, propose a plan, and use the bound G1brain tools after the user approves the plan. Tool approval remains required for writes.',
+].join('\n\n')
 
 interface CreateGrant {
   readonly expiresAt: number
@@ -109,7 +118,7 @@ function itemsOf(value: unknown): G1brainCatalogItem[] {
 
 /** Host-only Remote service. No bearer token is exposed to the Client. */
 export default class G1brainIntegration extends TypertRemoteService {
-  static inject = ['tools', 'sessions', 'agents', 'approval']
+  static inject = ['tools', 'sessions', 'agents', 'approval', 'systemPrompt']
 
   static Config: z<Partial<Config>, Config> = z.object({
     baseUrl: z.string().default(''),
@@ -172,6 +181,11 @@ export default class G1brainIntegration extends TypertRemoteService {
       })
     }
     if (this.endpoint === undefined) return
+    ctx.systemPrompt.section({
+      name: 'g1brain:workflow',
+      order: ctx.systemPrompt.getSectionOrder('MCP_SERVERS'),
+      text: WORKFLOW_GUIDANCE,
+    })
     ctx.effect(() => ctx.tools.register(defineTool({
       name: 'g1brain_list_ontology_collections',
       description: 'List G1brain ontology collections available to the current desktop configuration.',
@@ -218,10 +232,7 @@ export default class G1brainIntegration extends TypertRemoteService {
         }), `g1brain: global read ${tool.name}`)
       }
     }
-    ctx.on('agent/created', async ({ agent }) => {
-      try { await this.attachAgent(agent) }
-      catch (error) { ctx.logger.warn(`G1brain Session tools could not attach: ${error instanceof Error ? error.message : String(error)}`) }
-    })
+    ctx.on('agent/created', async ({ agent }) => { await this.attachAgent(agent) })
     for (const agent of ctx.agents.list()) {
       void this.attachAgent(agent).catch((error: unknown) => {
         ctx.logger.warn(`G1brain existing Session tools could not attach: ${error instanceof Error ? error.message : String(error)}`)

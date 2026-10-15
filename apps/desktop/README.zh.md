@@ -342,7 +342,7 @@ pnpm run package:desktop:mac:arm64:unsigned --build-version 0.2.1-alpha.1.202610
 
 这些命令使用独立的 G1brain 应用 ID，省略自动更新与强更策略，清除签名凭据，文件名带 `-unsigned`，且不生成发布完成记录。它们不需要 dotenv 文件、签名凭据或更新源地址。Windows 仍需 Python、Visual C++ 构建工具等常规依赖；Python 不在 `PATH` 时设置 `PYTHON`。产物位于各目标的 `unsigned-artifacts/` 目录。macOS DMG 未经 Developer ID 签名或 Apple 公证，只适合受控测试，不适合公开分发；macOS Gatekeeper 可能要求用户批准后才能打开。签名打包和上传命令仍遵循正式发布要求。
 
-[G1brain 未签名桌面安装包工作流](../../.github/workflows/g1brain-unsigned-desktop.yml) 在 GitHub 原生 macOS arm64 和 Windows x64 runner 上分别构建，只把 DMG 和 EXE 作为保留 14 天的工作流产物上传，不创建 GitHub Release 或更新源。如果全程留在 `g1brain` 分支，先提交并推送完整源码，再把指向该提交的 `g1brain-unsigned-v<已确认完整版本号>` 标签推送到 GitHub；标签推送会触发两个安装包构建，不需要改动默认分支。每次新构建须重新确认版本并使用新标签。工作流进入仓库默认分支后，也可通过「Run workflow」按钮选择分支、输入版本和目标。工作流无需仓库密钥，但 runner 须有足够磁盘空间容纳内置运行时。
+[G1brain 未签名桌面安装包工作流](../../.github/workflows/g1brain-unsigned-desktop.yml) 在推送 `g1brain` 分支时运行原生 macOS、Windows 目录绑定及真实 Loader 会话回归。未签名标签或手动运行须先通过这些检查，才会构建 macOS arm64 和 Windows x64 安装包；DMG、EXE 作为工作流产物保留 14 天，不创建 GitHub Release 或更新源。如全程留在 `g1brain`，先提交并推送完整源码，再推送指向该提交的 `g1brain-unsigned-v<已确认完整版本号>` 标签，无需改动默认分支。每次安装包构建须重新确认版本并使用新标签。工作流进入默认分支后，也可通过「Run workflow」按钮输入版本并选择目标。工作流无需仓库密钥，但 runner 须有足够磁盘空间容纳内置运行时。
 
 ### Windows 安装界面
 

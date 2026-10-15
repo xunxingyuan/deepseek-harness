@@ -1,7 +1,7 @@
 /** Durable, fail-closed G1brain target bindings keyed by Harness Session id. */
 import { createHash } from 'node:crypto'
 import { lstat, mkdir, readFile, realpath, stat, writeFile } from 'node:fs/promises'
-import { isAbsolute, join } from 'node:path'
+import { isAbsolute, join, relative } from 'node:path'
 import type { SessionId } from '@deepseek-ai/dsh-session/types'
 import type { G1brainSessionTarget } from './types.ts'
 
@@ -103,12 +103,13 @@ class BindingStore {
   async bind(session: BindingSession, input: G1brainSessionTarget): Promise<G1brainSessionTarget> {
     if (session.header.parentSession !== undefined) throw new Error('Bind the top-level Harness Session, not a child')
     const folderPath = await canonicalDirectory(session)
-    if (await realpath(input.folderPath) !== folderPath) throw new Error('Selected directory differs from the Session Workspace')
+    if (relative(folderPath, await realpath(input.folderPath)) !== '') throw new Error('Selected directory differs from the Session Workspace')
     const target = targetOf({ ...input, folderPath })
     const record: BindingRecord = { version: 1, sessionId: session.id, target }
     await mkdir(this.directory, { recursive: true, mode: 0o700 })
     const info = await lstat(this.directory)
-    if (!info.isDirectory() || info.isSymbolicLink() || (info.mode & 0o077) !== 0) {
+    // Windows protection comes from the user's profile ACL; stat.mode does not describe its access rules.
+    if (!info.isDirectory() || info.isSymbolicLink() || (process.platform !== 'win32' && (info.mode & 0o077) !== 0)) {
       throw new Error('G1brain binding directory is not private')
     }
     const file = this.path(session.id)
@@ -137,7 +138,7 @@ class BindingStore {
     const text = await readFile(file, 'utf8')
     const value: unknown = JSON.parse(text)
     const record = recordOf(value, session.id)
-    if (record.target.folderPath !== await canonicalDirectory(session)) {
+    if (relative(record.target.folderPath, await canonicalDirectory(session)) !== '') {
       throw new Error('Saved G1brain target differs from the Session Workspace')
     }
     return record.target

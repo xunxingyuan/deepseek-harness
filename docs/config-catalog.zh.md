@@ -1294,8 +1294,8 @@ export type Config = LocalConfig
 
 ## `@deepseek-ai/dsh-g1brain-integration`
 
-- `inject`: `tools` · `sessions` · `agents` · `approval`
-- `source`: [`packages/g1brain/integration/src/index.ts:64`](../packages/g1brain/integration/src/index.ts)
+- `inject`: `tools` · `sessions` · `agents` · `approval` · `systemPrompt`
+- `source`: [`packages/g1brain/integration/src/index.ts:73`](../packages/g1brain/integration/src/index.ts)
 
 ```ts config-catalog
 /** Deployment settings; credentials stay in the Host process. */

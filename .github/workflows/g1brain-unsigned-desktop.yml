@@ -2,6 +2,8 @@ name: G1brain unsigned desktop installers
 
 on:
   push:
+    branches:
+      - g1brain
     tags:
       - 'g1brain-unsigned-v*'
   workflow_dispatch:
@@ -32,6 +34,7 @@ env:
 
 jobs:
   version:
+    if: github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/g1brain-unsigned-v')
     runs-on: ubuntu-latest
     outputs:
       build_version: ${{ steps.resolve.outputs.build_version }}
@@ -57,9 +60,42 @@ jobs:
           fi
           echo "build_version=$build_version" >> "$GITHUB_OUTPUT"
 
+  regression:
+    name: G1brain workflow regression (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-15, windows-2025]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+          cache: pnpm
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Verify native folder binding and G1brain tools
+        run: pnpm exec vitest run packages/g1brain/integration/tests/bindings.spec.ts packages/g1brain/integration/tests/session-tools.spec.ts packages/g1brain/integration/tests/integration.spec.ts packages/client/ui-g1brain/tests/home.client.spec.tsx packages/client/ui-g1brain/tests/preparation.client.spec.ts
+      - name: Build application libraries
+        run: pnpm run build:official
+      - name: Verify prepared Session through the real Loader
+        env:
+          DSH_EXAMPLE_MODE: lib
+        run: pnpm run test:e2e packages/g1brain/integration/tests/workflow.e2e.ts --retry=0
+      - name: Replay G1brain guidance Session
+        if: runner.os != 'Windows'
+        env:
+          DSH_EXAMPLE_MODE: lib
+        run: pnpm run test:snapshot snapshots/session/headless.snapshot.ts -t 'replays g1brain-session-guidance'
+
   mac-arm64:
-    needs: version
-    if: github.event_name == 'push' || inputs.target == 'both' || inputs.target == 'mac-arm64'
+    needs: [version, regression]
+    if: startsWith(github.ref, 'refs/tags/g1brain-unsigned-v') || (github.event_name == 'workflow_dispatch' && (inputs.target == 'both' || inputs.target == 'mac-arm64'))
     runs-on: macos-15
     timeout-minutes: 180
     steps:
@@ -89,8 +125,8 @@ jobs:
           retention-days: 14
 
   win-x64:
-    needs: version
-    if: github.event_name == 'push' || inputs.target == 'both' || inputs.target == 'win-x64'
+    needs: [version, regression]
+    if: startsWith(github.ref, 'refs/tags/g1brain-unsigned-v') || (github.event_name == 'workflow_dispatch' && (inputs.target == 'both' || inputs.target == 'win-x64'))
     runs-on: windows-2025
     timeout-minutes: 180
     steps:

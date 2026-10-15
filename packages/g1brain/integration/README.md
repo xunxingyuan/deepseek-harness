@@ -29,6 +29,8 @@ The workbench calls `bindSession` for a new top-level Session. The Host verifies
 
 Document processing follows the G1brain Web application's MD API: after upload, submit an `MD` slicing task, confirm it succeeded, then submit a `CHUNK` task for any selected keyword, vectorization, and index operations. The submission tool accepts either all current files in the bound library or explicit document IDs verified against that library. Seven task tools cover submission, current/history lists, detail, per-file status, bounded waiting, and cancellation. List and detail results are summarized so a large task does not flood the model context.
 
+Binding storage checks private directory permissions on POSIX; Windows relies on the current user's profile ACL instead of synthetic POSIX mode bits. Folder matching uses the platform's path comparison, including Windows drive-letter case. A resumed agent fails initialization if its binding or source folder cannot be loaded, rather than silently falling back to read-only tools.
+
 Ordinary unbound Sessions can list ontology collections, domains, taxonomy nodes, properties, relation definitions and types, entities and relation edges. They can also list documents and use hybrid, QA, chunk-location, and chunk-list queries. Only these named read tools are global; tool inputs are validated and returned text is capped at 32 KiB with a truncation notice. They use the Host's configured G1brain identity, not an independently verified identity from the Desktop sign-in.
 
 <a id="understand-the-package"></a>
@@ -44,6 +46,34 @@ The Host plugin owns service credentials, resource catalogs, durable Session bin
 
 <a id="model-experience"></a>
 ## Model Experience
+
+### Workflow guidance
+
+#### What the model sees
+
+The fixed `g1brain:workflow` system section adds the following text. The [recorded system prompt](../../../snapshots/session/g1brain-session-guidance/system-prompt.expected.md) verifies its placement.
+
+##### Workflow instruction
+
+```markdown
+## G1brain workflow
+
+Reply in the language of the current user request, including progress updates, clarification questions, and the final result. Use Simplified Chinese for Chinese requests unless the user explicitly asks for another language.
+
+Use the available G1brain tools for ontology and document operations. Ordinary Sessions provide discovery and search; creation and updates require a G1brain build or improvement Session prepared with the selected ontology, domain, document library, and source folder.
+
+If write tools are absent, explain that this Session is read-only and direct the user to prepare a G1brain build or improvement Session. Do not interpret missing write tools as missing API credentials or ask the user to install another plugin.
+
+In a prepared Session, inspect the sources, propose a plan, and use the bound G1brain tools after the user approves the plan. Tool approval remains required for writes.
+```
+
+#### Token effect
+
+The configured integration adds this fixed section to each agent request, independent of catalog size.
+
+#### KV Cache effect
+
+The section stays constant across ordinary and prepared Sessions. Its text changes the system prefix when the integration is updated or enabled.
 
 ### Catalog and bound-Session tools
 
