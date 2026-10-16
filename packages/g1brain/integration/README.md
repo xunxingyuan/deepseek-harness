@@ -40,6 +40,8 @@ Ordinary unbound Sessions can list ontology collections, domains, taxonomy nodes
 
 The Host plugin owns service credentials, resource catalogs, durable Session binding, and per-call authorization. The Client UI uses its catalog and binding methods; ordinary Sessions receive only the global read tools.
 
+The Host artifact embeds the pinned SheetJS parser and its license and notice text. The CDN tarball is a build-only dependency, not an installed plugin dependency, so Desktop production assembly retains pnpm's exotic-subdependency restriction. The built Loader workflow forbids resolving an external `xlsx` package while reading and uploading Excel materials.
+
 <a id="further-reading"></a>
 ## Further reading
 

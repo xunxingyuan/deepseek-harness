@@ -1,8 +1,9 @@
 /** Real Loader workflow against a loopback G1brain backend with an isolated materials directory. */
 import { createServer } from 'node:http'
 import { once } from 'node:events'
-import { mkdir, writeFile } from 'node:fs/promises'
+import { mkdir, readFile, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
+import { createRequire, registerHooks } from 'node:module'
 import type { Context } from '@deepseek-ai/cordis'
 import { SessionId } from '@deepseek-ai/dsh-session'
 import { runFixtureTurn } from '@deepseek-ai/dsh-loader-smoke'
@@ -57,6 +58,7 @@ const server = createServer((request, response) => {
   })
 })
 let ctx: Context | undefined
+let resolutionGuard: ReturnType<typeof registerHooks> | undefined
 try {
   server.listen(0, '127.0.0.1')
   await once(server, 'listening')
@@ -73,6 +75,19 @@ try {
   await writeFile(join(materials, '第一张表.md'), '# 第一张表\nG1BRAIN_WINDOWS_MATERIAL_EVIDENCE\n')
   await writeFile(join(materials, '中文 Word.docx'), chineseDocx())
   await writeFile(join(materials, '中文 Excel.xlsx'), chineseWorkbook())
+  // Built plugins must work without the source checkout's build-only spreadsheet dependency.
+  if (process.env.DSH_EXAMPLE_MODE === 'lib') {
+    const bundle = await readFile(createRequire(import.meta.url).resolve('@deepseek-ai/dsh-g1brain-integration'), 'utf8')
+    if (!bundle.startsWith('//! Bundled SheetJS license notices') || !bundle.includes('Apache License')) {
+      throw new Error('Installed G1brain must retain bundled SheetJS notices')
+    }
+    resolutionGuard = registerHooks({
+      resolve(specifier, context, nextResolve) {
+        if (specifier === 'xlsx' || specifier.startsWith('xlsx/')) throw new Error('Installed G1brain must embed SheetJS, not resolve xlsx')
+        return nextResolve(specifier, context)
+      },
+    })
+  }
   ctx = await bootProductionProfile({ binName: 'g1brain-workflow-test', profile: 'headless', overlayPaths: [overlay] })
   const id = SessionId('session-g1brain-workflow')
   const { agent } = await ctx.agents.create({ sessionId: id, meta: { cwd: materials }, agentOptions: { provider: 'g1brain-workflow-fixture', model: 'fixture' } })
@@ -86,6 +101,8 @@ try {
   await writeFile(join(process.cwd(), 'backend-proof.json'), JSON.stringify({ requests, before, after, output: result.output }))
   process.stdout.write(JSON.stringify({ type: 'g1brain-workflow-result', before, after, output: result.output }) + '\n')
 } finally {
-  await ctx?.fiber.dispose()
-  await new Promise<void>((resolve, reject) => { server.close((error) => { if (error) reject(error); else resolve() }) })
+  try { await ctx?.fiber.dispose() } finally {
+    resolutionGuard?.deregister()
+    await new Promise<void>((resolve, reject) => { server.close((error) => { if (error) reject(error); else resolve() }) })
+  }
 }

@@ -80,7 +80,7 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
       - name: Verify native folder binding and G1brain tools
-        run: pnpm exec vitest run packages/g1brain/integration/tests/bindings.spec.ts packages/g1brain/integration/tests/materials.spec.ts packages/g1brain/integration/tests/tool-schema.spec.ts packages/g1brain/integration/tests/session-tools.spec.ts packages/g1brain/integration/tests/integration.spec.ts packages/client/ui-g1brain/tests/home.client.spec.tsx packages/client/ui-g1brain/tests/preparation.client.spec.ts
+        run: pnpm exec vitest run packages/g1brain/integration/tests/bindings.spec.ts packages/g1brain/integration/tests/bundle.spec.ts packages/g1brain/integration/tests/materials.spec.ts packages/g1brain/integration/tests/tool-schema.spec.ts packages/g1brain/integration/tests/session-tools.spec.ts packages/g1brain/integration/tests/integration.spec.ts packages/client/ui-g1brain/tests/home.client.spec.tsx packages/client/ui-g1brain/tests/preparation.client.spec.ts
       - name: Build application libraries
         run: pnpm run build:official
       - name: Verify prepared Session through the real Loader

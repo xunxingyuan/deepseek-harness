@@ -9060,9 +9060,6 @@ importers:
       turndown:
         specifier: ^7.2.4
         version: 7.2.4
-      xlsx:
-        specifier: https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz
-        version: https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz
       zod:
         specifier: ^4.4.3
         version: 4.4.3
@@ -9097,6 +9094,12 @@ importers:
       '@types/turndown':
         specifier: ^5.0.6
         version: 5.0.6
+      tsdown:
+        specifier: ^0.22.2
+        version: 0.22.2(oxc-resolver@11.20.0)(publint@0.3.21)(tsx@4.22.4)(typescript@6.0.3)
+      xlsx:
+        specifier: https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz
+        version: https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz
 
   packages/goal/command-goal:
     devDependencies:
@@ -29572,7 +29575,7 @@ snapshots:
       picomatch: 4.0.4
       rolldown: 1.1.1
       rolldown-plugin-dts: 0.25.2(oxc-resolver@11.20.0)(rolldown@1.1.1)(typescript@6.0.3)
-      semver: 7.8.4
+      semver: 7.8.5
       tinyexec: 1.2.4
       tinyglobby: 0.2.17
       tree-kill: 1.2.2
