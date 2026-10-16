@@ -215,7 +215,8 @@
         "type": "object",
         "properties": {
           "collectionName": {
-            "type": "string"
+            "type": "string",
+            "description": "文档库集合的 API name，普通会话先列出文档库取其 name；绑定会话取自 g1brain_context.task.documentLibraryName 或 createDocumentLibraryName。不是本体集合名、领域名或 displayName。"
           },
           "query": {
             "type": "string"
@@ -235,7 +236,8 @@
         "type": "object",
         "properties": {
           "collectionName": {
-            "type": "string"
+            "type": "string",
+            "description": "文档库集合的 API name，普通会话先列出文档库取其 name；绑定会话取自 g1brain_context.task.documentLibraryName 或 createDocumentLibraryName。不是本体集合名、领域名或 displayName。"
           }
         },
         "required": [
@@ -259,7 +261,8 @@
         "type": "object",
         "properties": {
           "collectionName": {
-            "type": "string"
+            "type": "string",
+            "description": "文档库集合的 API name，普通会话先列出文档库取其 name；绑定会话取自 g1brain_context.task.documentLibraryName 或 createDocumentLibraryName。不是本体集合名、领域名或 displayName。"
           }
         },
         "required": [
@@ -391,7 +394,8 @@
         "type": "object",
         "properties": {
           "collectionName": {
-            "type": "string"
+            "type": "string",
+            "description": "文档库集合的 API name，普通会话先列出文档库取其 name；绑定会话取自 g1brain_context.task.documentLibraryName 或 createDocumentLibraryName。不是本体集合名、领域名或 displayName。"
           },
           "fileName": {
             "type": "string"
@@ -420,7 +424,8 @@
         "type": "object",
         "properties": {
           "collectionName": {
-            "type": "string"
+            "type": "string",
+            "description": "文档库集合的 API name，普通会话先列出文档库取其 name；绑定会话取自 g1brain_context.task.documentLibraryName 或 createDocumentLibraryName。不是本体集合名、领域名或 displayName。"
           },
           "query": {
             "type": "string"

@@ -50,8 +50,12 @@ describe('G1brain landing page', () => {
     expect(call.target.folderPath).toBe('/tmp/g1brain-material')
     expect(call.target.createOntologyCollectionName).toBe('设备本体')
     expect(call.target.createDomainName).toBe('设备领域')
+    expect(call.target.createDocumentLibraryName).toBe('设备资料')
     expect(call.prompt).toContain('设备本体')
-    expect(call.prompt).toContain('在我确认方案前，不要创建、上传、修改或删除')
+    expect(call.prompt).toContain('新增、修改、上传和文档处理可直接执行')
+    expect(call.prompt).toContain('必须由 Harness 逐次审批')
+    expect(call.prompt).toContain('仅查询或要求先给方案时不执行写入')
+    expect(call.prompt).not.toContain('在我确认方案前')
     expect(call.prompt).toContain('先提交 MD 切片任务并确认成功')
     expect(call.prompt).toContain('中文提问使用简体中文')
   })
@@ -80,6 +84,9 @@ describe('G1brain landing page', () => {
     expect(call.prompt).toContain('现有资料库')
     expect(call.target.ontologyCollectionName).toBe('已有本体')
     expect(call.target.domainName).toBe('设备领域')
+    expect(call.target.documentLibraryName).toBe('现有资料库')
+    expect(call.target.ontologyCollectionName).not.toBe('设备运维知识图谱')
+    expect(call.target.domainName).not.toBe('设备运维领域')
   })
 
   it('accepts a pasted absolute folder path when the native chooser is unavailable', async () => {

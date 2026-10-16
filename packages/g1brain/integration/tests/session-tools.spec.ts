@@ -31,7 +31,7 @@ afterEach(async () => {
   for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true })
 })
 
-async function harness() {
+async function harness(allowWrites = true) {
   const root = mkdtempSync(join(tmpdir(), 'g1brain-session-tools-'))
   roots.push(root)
   const materials = join(root, 'materials')
@@ -39,7 +39,7 @@ async function harness() {
   process.env.DSH_HOME = root
   process.env.G1BRAIN_AUTH_MODE = 'local-dev'
   process.env.G1BRAIN_ALLOW_LOCAL_DEV = '1'
-  process.env.G1BRAIN_ALLOW_DEV_WRITES = '1'
+  process.env.G1BRAIN_ALLOW_DEV_WRITES = allowWrites ? '1' : '0'
   process.env.G1BRAIN_LOCAL_USER_ID = 'developer'
   process.env.G1BRAIN_LOCAL_CLIENT_ID = 'g1brain-web'
   const ctx = new Context()
@@ -49,7 +49,7 @@ async function harness() {
   const id = SessionId('session-g1brain-test')
   const session = { id, header: { cwd: materials } }
   const agent: { id: typeof id; ctx?: Context } = { id }
-  const approval = vi.fn(async (_request: { displayReason?: { zh: string } }) => 'rejected')
+  const approval = vi.fn(async (_request: { callId?: string; displayReason?: { zh: string } }) => 'rejected')
   ctx.provide('sessions', { get: () => session } as never)
   ctx.provide('agents', { get: () => agent, list: () => [] } as never)
   ctx.provide('approval', { request: approval } as never)
@@ -119,7 +119,21 @@ describe('bound G1brain Session tools', () => {
     await otherScope.dispose()
   })
 
-  it('requires confirm, matching targets, and an approval before a remote write', async () => {
+  it('creates bound resources without a confirmation flag or an approval request', async () => {
+    const { ctx, agent, service, session, materials, approval, fetcher } = await harness()
+    await service.bindSession({ sessionId: session.id, target: {
+      mode: 'new-ontology', folderPath: materials, createOntologyCollectionName: '测试本体',
+      createDomainName: '设备', createDocumentLibraryName: '测试资料库',
+    } })
+    const created = await ctx.tools.execute({ signal: new AbortController().signal,
+      callId: 'automatic-create' as never, name: 'g1brain_create_ontology_collection',
+      arguments: { name: '测试本体' }, agent: agent as never })
+    expect(created.isError).toBe(false)
+    expect(approval).not.toHaveBeenCalled()
+    expect(fetcher).toHaveBeenCalledTimes(1)
+  })
+
+  it('keeps resource scoping enforced when non-deletion writes no longer need approval', async () => {
     const { ctx, agent, service, session, materials, approval, fetcher } = await harness()
     await service.bindSession({ sessionId: session.id, target: {
       mode: 'new-ontology', folderPath: materials, createOntologyCollectionName: '测试本体',
@@ -127,15 +141,12 @@ describe('bound G1brain Session tools', () => {
     } })
     const call = (argumentsValue: object) => ctx.tools.execute({ signal: new AbortController().signal,
       callId: 'write-test' as never, name: 'g1brain_create_document_library', arguments: argumentsValue, agent: agent as never })
-    expect((await call({ name: '测试资料库' })).isError).toBe(true)
     expect((await call({ name: '其他库', confirm: true })).isError).toBe(true)
-    const denied = await call({ name: '测试资料库', confirm: true })
-    expect(denied.isError).toBe(true)
-    expect(approval).toHaveBeenCalledTimes(1)
+    expect(approval).not.toHaveBeenCalled()
     expect(fetcher).not.toHaveBeenCalled()
-    approval.mockResolvedValueOnce('allowed-once')
-    const allowed = await call({ name: '测试资料库', confirm: true })
+    const allowed = await call({ name: '测试资料库', confirm: false })
     expect(allowed.isError).toBe(false)
+    expect(approval).not.toHaveBeenCalled()
     expect(fetcher).toHaveBeenCalledTimes(1)
   })
 
@@ -149,95 +160,137 @@ describe('bound G1brain Session tools', () => {
     await expect(ctx.serial('agent/created', { agent: { ...agent } as never, source: 'resume' })).rejects.toThrow()
   })
 
-  it('reuses one bounded approval for the same creation tool and target only', async () => {
+  it('creates repeated properties and updates them without approval or grant limits', async () => {
     const { ctx, agent, service, session, materials, approval, fetcher } = await harness()
     await service.bindSession({ sessionId: session.id, target: {
       mode: 'new-ontology', folderPath: materials, createOntologyCollectionName: '测试本体',
       createDomainName: '设备', createDocumentLibraryName: '测试资料库',
     } })
-    approval.mockResolvedValue('allowed-once')
-    const property = (sid: string, confirm = true) => ctx.tools.execute({ signal: new AbortController().signal,
+    const property = (sid: string) => ctx.tools.execute({ signal: new AbortController().signal,
       callId: `property-${sid}` as never, name: 'g1brain_create_ontology_property',
       arguments: { collectionName: '测试本体', domainName: '设备', sid, displayName: sid,
-        valueType: 'STRING', kind: 'SCALAR', confirm }, agent: agent as never })
-    expect((await property('one')).isError).toBe(false)
-    expect(approval).toHaveBeenCalledTimes(1)
-    expect(approval.mock.calls[0]?.[0].displayReason?.zh).toContain('30 分钟内最多 100 次')
-    expect((await property('two')).isError).toBe(false)
-    expect(approval).toHaveBeenCalledTimes(1)
-    expect((await property('three', false)).isError).toBe(true)
-    expect(fetcher).toHaveBeenCalledTimes(2)
-    const otherCreate = await ctx.tools.execute({ signal: new AbortController().signal,
-      callId: 'other-create' as never, name: 'g1brain_create_document_library',
-      arguments: { name: '测试资料库', confirm: true }, agent: agent as never })
-    expect(otherCreate.isError).toBe(false)
-    expect(approval).toHaveBeenCalledTimes(2)
-    for (let index = 0; index < 98; index += 1) expect((await property(`more-${index}`)).isError).toBe(false)
-    expect(approval).toHaveBeenCalledTimes(2)
-    expect((await property('renew')).isError).toBe(false)
-    expect(approval).toHaveBeenCalledTimes(3)
+        valueType: 'STRING', kind: 'SCALAR' }, agent: agent as never })
+    for (let index = 0; index < 105; index += 1) expect((await property(`property-${index}`)).isError).toBe(false)
+    const updated = await ctx.tools.execute({ signal: new AbortController().signal,
+      callId: 'update-property' as never, name: 'g1brain_update_ontology_property',
+      arguments: { collectionName: '测试本体', domainName: '设备', propertySid: 'property-1', properties: { description: '更新说明' } },
+      agent: agent as never })
+    expect(updated.isError).toBe(false)
+    expect(fetcher).toHaveBeenCalledTimes(106)
+    expect(approval).not.toHaveBeenCalled()
   })
 
-  it('expires a creation grant after 30 minutes and never reuses it for deletions', async () => {
-    const { ctx, agent, service, session, materials, approval } = await harness()
-    await service.bindSession({ sessionId: session.id, target: {
-      mode: 'new-ontology', folderPath: materials, createOntologyCollectionName: '测试本体',
-      createDomainName: '设备', createDocumentLibraryName: '测试资料库',
-    } })
-    approval.mockResolvedValue('allowed-once')
-    const now = vi.spyOn(Date, 'now').mockReturnValue(10_000)
-    const call = (name: string, args: object) => ctx.tools.execute({ signal: new AbortController().signal,
-      callId: name as never, name, arguments: args, agent: agent as never })
-    const args = { collectionName: '测试本体', domainName: '设备', sid: 'serial', displayName: '序列号',
-      valueType: 'STRING', kind: 'SCALAR', confirm: true }
-    expect((await call('g1brain_create_ontology_property', args)).isError).toBe(false)
-    now.mockReturnValue(10_000 + 30 * 60 * 1000 + 1)
-    expect((await call('g1brain_create_ontology_property', { ...args, sid: 'serial2' })).isError).toBe(false)
-    expect(approval).toHaveBeenCalledTimes(2)
-    expect((await call('g1brain_delete_ontology_property', {
-      collectionName: '测试本体', domainName: '设备', nodeId: 'property-1', confirm: true,
-    })).isError).toBe(false)
-    expect(approval).toHaveBeenCalledTimes(3)
-    expect((await call('g1brain_delete_ontology_property', {
-      collectionName: '测试本体', domainName: '设备', nodeId: 'property-2', confirm: true,
-    })).isError).toBe(false)
-    expect(approval).toHaveBeenCalledTimes(4)
-    now.mockRestore()
-  })
-
-  it('shares one pending approval across parallel calls to the same creation tool', async () => {
+  it.each([
+    ['g1brain_delete_ontology_entity', { nodeId: '1', expectedSid: 'entity-1' }],
+    ['g1brain_delete_ontology_relation', { relationId: 'relation-1' }],
+    ['g1brain_delete_ontology_property', { nodeId: 'property-1' }],
+    ['g1brain_delete_ontology_relation_type', { relationSid: 'relation-type-1' }],
+  ] as const)('blocks %s without explicit intent or when approval is rejected', async (name, target) => {
     const { ctx, agent, service, session, materials, approval, fetcher } = await harness()
     await service.bindSession({ sessionId: session.id, target: {
       mode: 'new-ontology', folderPath: materials, createOntologyCollectionName: '测试本体',
       createDomainName: '设备', createDocumentLibraryName: '测试资料库',
     } })
-    const decision = Promise.withResolvers<string>()
-    approval.mockImplementationOnce(async () => decision.promise)
-    const call = (sid: string) => ctx.tools.execute({ signal: new AbortController().signal,
-      callId: `parallel-${sid}` as never, name: 'g1brain_create_ontology_property',
-      arguments: { collectionName: '测试本体', domainName: '设备', sid, displayName: sid,
-        valueType: 'STRING', kind: 'SCALAR', confirm: true }, agent: agent as never })
-    const first = call('first')
-    const second = call('second')
-    await vi.waitFor(() => { expect(approval).toHaveBeenCalledTimes(1) })
-    decision.resolve('allowed-once')
-    const results = await Promise.all([first, second])
-    expect(results.every(result => !result.isError)).toBe(true)
+    const call = (args: object) => ctx.tools.execute({ signal: new AbortController().signal,
+      callId: 'delete-test' as never, name, arguments: args, agent: agent as never })
+    const args = { collectionName: '测试本体', domainName: '设备', ...target }
+    expect((await call(args)).isError).toBe(true)
+    expect(approval).not.toHaveBeenCalled()
+    expect((await call({ ...args, confirm: false })).isError).toBe(true)
+    expect(approval).not.toHaveBeenCalled()
+    expect((await call({ ...args, confirm: true })).isError).toBe(true)
     expect(approval).toHaveBeenCalledTimes(1)
-    expect(fetcher).toHaveBeenCalledTimes(2)
+    expect(approval.mock.calls[0]?.[0].displayReason?.zh).toContain('确认 G1brain 删除')
+    expect(fetcher).not.toHaveBeenCalled()
   })
 
-  it('uploads only a selected relative file after approval and rejects a path outside the materials directory', async () => {
+  it('approves replacement imports as deletions but allows additive imports directly', async () => {
+    const { ctx, agent, service, session, materials, approval, fetcher } = await harness()
+    await service.bindSession({ sessionId: session.id, target: {
+      mode: 'new-ontology', folderPath: materials, createOntologyCollectionName: '测试本体',
+      createDomainName: '设备', createDocumentLibraryName: '测试资料库',
+    } })
+    const pkg = { targets: { collection: { defaultName: '测试本体' }, domains: [{ name: '设备' }] } }
+    const call = (options: object) => ctx.tools.execute({ signal: new AbortController().signal,
+      callId: 'package-import' as never, name: 'g1brain_import_ontology_package',
+      arguments: { collectionName: '测试本体', package: pkg, ...options }, agent: agent as never })
+    expect((await call({ replace: false })).isError).toBe(false)
+    expect(approval).not.toHaveBeenCalled()
+    expect(fetcher).toHaveBeenCalledTimes(1)
+    expect((await call({ replace: true })).isError).toBe(true)
+    expect(approval).not.toHaveBeenCalled()
+    expect((await call({ replace: true, confirm: true })).isError).toBe(true)
+    expect(approval).toHaveBeenCalledTimes(1)
+    expect(fetcher).toHaveBeenCalledTimes(1)
+    expect(approval.mock.calls[0]?.[0].displayReason?.zh).toContain('替换导入可能删除已有内容')
+    approval.mockResolvedValueOnce('allowed-once')
+    expect((await call({ replace: true, confirm: true })).isError).toBe(false)
+    expect(approval).toHaveBeenCalledTimes(2)
+    expect(fetcher).toHaveBeenCalledTimes(2)
+    expect(fetcher.mock.calls[1]?.[0]).toContain('replace=true')
+  })
+
+  it('does not grant write access when development writes are disabled', async () => {
+    const { ctx, agent, service, session, materials, approval, fetcher } = await harness(false)
+    await service.bindSession({ sessionId: session.id, target: {
+      mode: 'new-ontology', folderPath: materials, createOntologyCollectionName: '测试本体',
+      createDomainName: '设备', createDocumentLibraryName: '测试资料库',
+    } })
+    const names = ctx.tools.schemas(agent).map(tool => tool.name)
+    expect(names).not.toContain('g1brain_create_ontology_collection')
+    expect(names).not.toContain('g1brain_delete_ontology_property')
+    expect(names).toContain('g1brain_read_selected_file')
+    const result = await ctx.tools.execute({ signal: new AbortController().signal,
+      callId: 'disabled-create' as never, name: 'g1brain_create_ontology_collection',
+      arguments: { name: '测试本体' }, agent: agent as never })
+    expect(result.isError).toBe(true)
+    expect(approval).not.toHaveBeenCalled()
+    expect(fetcher).not.toHaveBeenCalled()
+  })
+
+  it('never shares or reuses approval between parallel deletions', async () => {
+    const { ctx, agent, service, session, materials, approval, fetcher } = await harness()
+    await service.bindSession({ sessionId: session.id, target: {
+      mode: 'new-ontology', folderPath: materials, createOntologyCollectionName: '测试本体',
+      createDomainName: '设备', createDocumentLibraryName: '测试资料库',
+    } })
+    const first = Promise.withResolvers<string>(), second = Promise.withResolvers<string>()
+    approval.mockImplementation(async request => request.callId === 'delete-first' ? first.promise
+      : request.callId === 'delete-second' ? second.promise : 'rejected')
+    const call = (nodeId: string) => ctx.tools.execute({ signal: new AbortController().signal,
+      callId: `delete-${nodeId}` as never, name: 'g1brain_delete_ontology_property',
+      arguments: { collectionName: '测试本体', domainName: '设备', nodeId, confirm: true }, agent: agent as never })
+    const calls = [call('first'), call('second')]
+    const settled = Promise.allSettled(calls)
+    try {
+      await vi.waitFor(() => { expect(approval).toHaveBeenCalledTimes(2) })
+      expect(fetcher).not.toHaveBeenCalled()
+      first.resolve('allowed-once')
+      second.resolve('rejected')
+      const results = await Promise.all(calls)
+      expect(results.map(result => result.isError)).toEqual([false, true])
+      expect(fetcher).toHaveBeenCalledTimes(1)
+      expect(fetcher.mock.calls[0]?.[1].method).toBe('DELETE')
+      expect((await call('third')).isError).toBe(true)
+      expect(approval).toHaveBeenCalledTimes(3)
+      expect(fetcher).toHaveBeenCalledTimes(1)
+    } finally {
+      first.resolve('rejected')
+      second.resolve('rejected')
+      await settled
+    }
+  })
+
+  it('uploads selected relative files without approval and still rejects paths outside the materials directory', async () => {
     const { ctx, agent, service, session, materials, approval, fetcher } = await harness()
     writeFileSync(join(materials, 'evidence.md'), '# test evidence')
     await service.bindSession({ sessionId: session.id, target: {
       mode: 'new-ontology', folderPath: materials, createOntologyCollectionName: '测试本体',
       createDomainName: '设备', createDocumentLibraryName: '测试资料库',
     } })
-    approval.mockResolvedValue('allowed-once')
     const invoke = (files: string[]) => ctx.tools.execute({ signal: new AbortController().signal,
       callId: 'upload-test' as never, name: 'g1brain_upload_selected_files',
-      arguments: { collectionName: '测试资料库', files, confirm: true }, agent: agent as never })
+      arguments: { collectionName: '测试资料库', files }, agent: agent as never })
     expect((await invoke(['../outside.md'])).isError).toBe(true)
     expect(approval).not.toHaveBeenCalled()
     expect(fetcher).not.toHaveBeenCalled()
@@ -246,9 +299,10 @@ describe('bound G1brain Session tools', () => {
     expect(fetcher).toHaveBeenCalledTimes(1)
     expect(fetcher.mock.calls[0]?.[0]).toContain('/mdApi/v1/md/collections/')
     expect(fetcher.mock.calls[0]?.[1].body).toBeInstanceOf(FormData)
+    expect(approval).not.toHaveBeenCalled()
   })
 
-  it('submits MD and CHUNK processing tasks for files in the bound library with individual approvals', async () => {
+  it('submits MD and CHUNK processing tasks only for files in the bound library without approval', async () => {
     const { ctx, agent, service, session, materials, approval, fetcher } = await harness()
     await service.bindSession({ sessionId: session.id, target: {
       mode: 'new-ontology', folderPath: materials, createOntologyCollectionName: '测试本体',
@@ -259,32 +313,35 @@ describe('bound G1brain Session tools', () => {
       if (url.endsWith('/tasks/submit')) return Response.json({ data: { taskId: 'task-created' } })
       throw new Error(`Unexpected request: ${url}`)
     })
-    approval.mockResolvedValue('allowed-once')
     const submit = (argumentsValue: object) => ctx.tools.execute({ signal: new AbortController().signal,
       callId: 'task-submit' as never, name: 'g1brain_submit_document_task', arguments: argumentsValue, agent: agent as never })
+    expect((await submit({ collectionName: '测试本体', type: 'MD', fileSelection: 'all' })).isError).toBe(true)
+    expect(fetcher).not.toHaveBeenCalled()
     expect((await submit({ collectionName: '其他库', type: 'MD', fileSelection: 'all', confirm: true })).isError).toBe(true)
     expect(approval).not.toHaveBeenCalled()
-    expect((await submit({ collectionName: '测试资料库', type: 'MD', fileSelection: 'all' })).isError).toBe(true)
+    expect((await submit({ collectionName: '测试资料库', type: 'MD', fileSelection: 'all', operations: ['indexCreate'] })).isError).toBe(true)
     expect(approval).not.toHaveBeenCalled()
-    expect((await submit({ collectionName: '测试资料库', type: 'MD', fileSelection: 'all', confirm: true })).isError).toBe(false)
+    expect((await submit({ collectionName: '测试资料库', type: 'MD', fileSelection: 'all' })).isError).toBe(false)
     const firstBody = fetcher.mock.calls.find(([url]) => url.endsWith('/tasks/submit'))?.[1].body
     expect(parseJsonText(firstBody)).toEqual({ type: 'MD', operations: ['slice'], mdIds: [11, 12],
       mdType: 'simple', chunkMetadata: {}, chunkSize: 512 })
     expect((await submit({ collectionName: '测试资料库', type: 'CHUNK', fileSelection: 'selected', mdIds: [12],
-      operations: ['keywords', 'vectorization', 'indexCreate'], confirm: true })).isError).toBe(false)
+      operations: ['keywords', 'vectorization', 'indexCreate'] })).isError).toBe(false)
     expect((await submit({ collectionName: '测试资料库', type: 'CHUNK', fileSelection: 'selected', mdIds: [99],
       operations: ['indexCreate'], confirm: true })).isError).toBe(true)
     const submissions = fetcher.mock.calls.filter(([url]) => url.endsWith('/tasks/submit'))
     expect(submissions).toHaveLength(2)
+    expect(submissions.map(([url]) => decodeURIComponent(new URL(url).pathname)))
+      .toEqual(['/mdApi/v1/md/collections/测试资料库/tasks/submit', '/mdApi/v1/md/collections/测试资料库/tasks/submit'])
     expect(parseJsonText(submissions[1]?.[1].body)).toEqual({ type: 'CHUNK', mdIds: [12],
       operations: ['keywords', 'vectorization', 'indexCreate'],
       embeddingMetadata: { keywords: 'keywords', llm_questions: 'faqs', _currentSectionToc: 'ToC', _heading: 'heading' },
       chunkMetadata: { _fileName: '文件名称', _currentSectionToc: '文档层级结构', _heading: '该段标题' },
       extraContent: [] })
-    expect(approval).toHaveBeenCalledTimes(3)
+    expect(approval).not.toHaveBeenCalled()
   })
 
-  it('reads compact task status, waits for a terminal task, and requires approval to cancel', async () => {
+  it('reads compact task status, waits for a terminal task, and cancels without deletion approval', async () => {
     const { ctx, agent, service, session, materials, approval, fetcher } = await harness()
     await service.bindSession({ sessionId: session.id, target: {
       mode: 'new-ontology', folderPath: materials, createOntologyCollectionName: '测试本体',
@@ -312,12 +369,9 @@ describe('bound G1brain Session tools', () => {
     expect(waited.isError).toBe(false)
     expect(parseJsonText(waited.content.find(block => block.type === 'text')?.text)).toMatchObject({ completed: true })
     expect(approval).not.toHaveBeenCalled()
-    const denied = await execute('g1brain_cancel_document_task', { collectionName: '测试资料库', taskId: 'task-1', confirm: true })
-    expect(denied.isError).toBe(true)
-    expect(fetcher.mock.calls.some(([url]) => url.endsWith('/cancel'))).toBe(false)
-    approval.mockResolvedValueOnce('allowed-once')
-    const cancelled = await execute('g1brain_cancel_document_task', { collectionName: '测试资料库', taskId: 'task-1', confirm: true })
+    const cancelled = await execute('g1brain_cancel_document_task', { collectionName: '测试资料库', taskId: 'task-1' })
     expect(cancelled.isError).toBe(false)
     expect(fetcher.mock.calls.find(([url]) => url.endsWith('/cancel'))?.[1].method).toBe('POST')
+    expect(approval).not.toHaveBeenCalled()
   })
 })

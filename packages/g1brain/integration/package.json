@@ -33,6 +33,7 @@
   },
   "devDependencies": {
     "@deepseek-ai/cordis": "workspace:~",
+    "@types/turndown": "^5.0.6",
     "@deepseek-ai/dsh-loader-smoke": "workspace:*",
     "@deepseek-ai/dsh-llm": "workspace:*",
     "@deepseek-ai/dsh-system-prompt": "workspace:*",
@@ -42,5 +43,5 @@
     "@deepseek-ai/dsh-user-approval": "workspace:*",
     "@deepseek-ai/dsh-typert-protocol": "workspace:*"
   },
-  "dependencies": { "@deepseek-ai/schemastery": "workspace:~", "@deepseek-ai/dsh-home-paths": "workspace:*", "js-md5": "0.7.3", "sm-crypto": "0.5.7", "zod": "^4.4.3" }
+  "dependencies": { "@deepseek-ai/schemastery": "workspace:~", "@deepseek-ai/dsh-home-paths": "workspace:*", "@joplin/turndown-plugin-gfm": "^1.0.67", "fflate": "^0.8.3", "mammoth": "1.13.0", "turndown": "^7.2.4", "xlsx": "https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz", "js-md5": "0.7.3", "sm-crypto": "0.5.7", "zod": "^4.4.3" }
 }

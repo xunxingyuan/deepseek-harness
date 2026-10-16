@@ -8,6 +8,7 @@ import { SessionId } from '@deepseek-ai/dsh-session'
 import { runFixtureTurn } from '@deepseek-ai/dsh-loader-smoke'
 import type G1brainIntegration from '@deepseek-ai/dsh-g1brain-integration'
 import { bootProductionProfile } from '../../../../test-support/loader-smoke/tests/fixtures/production-profile.ts'
+import { chineseDocx, chineseWorkbook } from './materials.ts'
 
 const overlay = process.argv[2]
 if (!overlay) throw new Error('G1brain workflow driver requires a patch path')
@@ -34,6 +35,18 @@ const server = createServer((request, response) => {
     } else if (request.method === 'POST' && url.pathname === '/mdApi/v1/md/collections') {
       if (url.searchParams.get('name') !== '周报文档库') throw new Error('Unexpected document library')
       requests.push('library:周报文档库'); name = '周报文档库'
+    } else if (request.method === 'POST' && decodeURIComponent(url.pathname) === '/mdApi/v1/md/collections/周报文档库/mds') {
+      const form = await new Response(body, { headers: { 'Content-Type': request.headers['content-type'] ?? '' } }).formData()
+      const file = form.get('file')
+      if (!(file instanceof File)) throw new Error('Expected UTF-8 Markdown file')
+      const content = await file.text()
+      const expected = file.name === '中文 Word.docx.md' ? '生产周报：中文正文' : '二号炉例行检查'
+      if (!['中文 Word.docx.md', '中文 Excel.xlsx.md'].includes(file.name) || !content.includes(expected)
+        || content.includes('\ufffd') || content.startsWith('PK')) throw new Error('Office upload was not extracted into Chinese Markdown')
+      requests.push(`upload:${file.name}`)
+    } else if (request.method === 'DELETE' && decodeURIComponent(url.pathname) === '/kgApi/v1/gs/collections/周报本体/domains/周报领域/props/obsolete-property') {
+      if (url.searchParams.get('cascade') !== 'false' || !requests.includes('domain:周报领域')) throw new Error('Unexpected deletion')
+      requests.push('delete:obsolete-property')
     } else throw new Error(`Unexpected request ${request.method} ${url.pathname}`)
     response.writeHead(200, { 'Content-Type': 'application/json' })
     response.end(JSON.stringify({ code: 200, data: { name } }))
@@ -58,6 +71,8 @@ try {
   const materials = join(process.cwd(), '中文 周报材料')
   await mkdir(materials)
   await writeFile(join(materials, '第一张表.md'), '# 第一张表\nG1BRAIN_WINDOWS_MATERIAL_EVIDENCE\n')
+  await writeFile(join(materials, '中文 Word.docx'), chineseDocx())
+  await writeFile(join(materials, '中文 Excel.xlsx'), chineseWorkbook())
   ctx = await bootProductionProfile({ binName: 'g1brain-workflow-test', profile: 'headless', overlayPaths: [overlay] })
   const id = SessionId('session-g1brain-workflow')
   const { agent } = await ctx.agents.create({ sessionId: id, meta: { cwd: materials }, agentOptions: { provider: 'g1brain-workflow-fixture', model: 'fixture' } })
@@ -66,7 +81,7 @@ try {
   await service.bindSession({ sessionId: id, target: { mode: 'new-ontology', folderPath: materials,
     createOntologyCollectionName: '周报本体', createDomainName: '周报领域', createDocumentLibraryName: '周报文档库' } })
   const after = ctx.tools.schemas(agent).filter(tool => tool.name.startsWith('g1brain_')).length
-  const result = await runFixtureTurn(ctx, { task: '方案已确认，请读取第一张表并创建周报本体、领域和文档库，用中文回复。' })
+  const result = await runFixtureTurn(ctx, { task: '请读取第一张表并创建周报本体、领域和文档库，随后申请删除废弃属性，用中文回复。' })
   if (failures.length) throw new Error(failures.join('; '))
   await writeFile(join(process.cwd(), 'backend-proof.json'), JSON.stringify({ requests, before, after, output: result.output }))
   process.stdout.write(JSON.stringify({ type: 'g1brain-workflow-result', before, after, output: result.output }) + '\n')

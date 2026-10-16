@@ -10,14 +10,14 @@ import { resolveDshHome } from '@deepseek-ai/dsh-home-paths'
 import { Remote, TypertRemoteService } from '@deepseek-ai/dsh-typert-protocol'
 import z from '@deepseek-ai/schemastery'
 import { createBindingStore } from './bindings.ts'
-import { assertTaskScope, MUTATING_TOOLS, scopedSchema } from './legacy/bridge/policy.ts'
+import { assertTaskScope, DELETION_TOOLS, MUTATING_TOOLS, requiresDeletionApproval, scopedSchema } from './legacy/bridge/policy.ts'
 import { openWorkspaceScope } from './legacy/bridge/scope.ts'
 import { createG1BrainTools } from './legacy/bridge/tools.ts'
 import { validateInput } from './legacy/bridge/validate.ts'
 import { createG1BrainClient, type G1BrainClient } from './legacy/g1brain/client.ts'
 import type { PreparedTask } from './legacy/types.ts'
 import { toHarnessToolSchema } from './tool-schema.ts'
-import type { G1brainBindReceipt, G1brainBindRequest, G1brainCatalogItem, G1brainSessionTarget, G1brainStatus } from './types.ts'
+import type { G1brainBindReceipt, G1brainBindRequest, G1brainCatalogItem, G1brainStatus } from './types.ts'
 
 export type { G1brainBindReceipt, G1brainBindRequest, G1brainCatalogItem, G1brainSessionTarget, G1brainStatus } from './types.ts'
 
@@ -44,30 +44,15 @@ const GLOBAL_READ_TOOLS = new Set([
 ])
 const GLOBAL_READ_RESULT_BYTES = 32 * 1024
 
-const REUSABLE_CREATE_TOOLS = new Set([
-  'g1brain_create_document_library',
-  'g1brain_create_ontology_collection',
-  'g1brain_create_ontology_domain',
-  'g1brain_create_ontology_entity',
-  'g1brain_create_ontology_relation',
-  'g1brain_create_ontology_property',
-  'g1brain_create_ontology_relation_type',
-])
-const CREATE_GRANT_DURATION_MS = 30 * 60 * 1000
-const CREATE_GRANT_MAX_CALLS = 100
-
 const WORKFLOW_GUIDANCE = [
   '## G1brain workflow',
   'Reply in the language of the current user request, including progress updates, clarification questions, and the final result. Use Simplified Chinese for Chinese requests unless the user explicitly asks for another language.',
   'Use the available G1brain tools for ontology and document operations. Ordinary Sessions provide discovery and search; creation and updates require a G1brain build or improvement Session prepared with the selected ontology, domain, document library, and source folder.',
   'If write tools are absent, explain that this Session is read-only and direct the user to prepare a G1brain build or improvement Session. Do not interpret missing write tools as missing API credentials or ask the user to install another plugin.',
-  'In a prepared Session, inspect the sources, propose a plan, and use the bound G1brain tools after the user approves the plan. Tool approval remains required for writes.',
+  'Use g1brain_read_selected_file to extract DOCX or Excel text and tables, not a raw text read of Office bytes. Upload tools extract UTF-8 Markdown before ingestion. Unsupported or encrypted files must be converted first; never upload garbled text as a successful extraction. Document uploads and processing tasks use the document library API name from the Session context, not the ontology collection name or a display name.',
+  'In a prepared Session, inspect the sources and cite evidence. Execute requested creation, updates, uploads, and document processing within the bound resources without asking for extra confirmation. A request only for information or a plan is not a request to write data. Ask clarification questions only when the intended scope or business requirement is ambiguous.',
+  'Deletion and replacement imports that may remove existing content require approval for each call. Set confirm=true for those calls and let Harness request approval; do not ask for a separate chat confirmation. Missing or rejected approval must prevent the deletion.',
 ].join('\n\n')
-
-interface CreateGrant {
-  readonly expiresAt: number
-  remainingCalls: number
-}
 
 /** Deployment settings; credentials stay in the Host process. */
 export interface Config {
@@ -133,8 +118,6 @@ export default class G1brainIntegration extends TypertRemoteService {
   private readonly bindings = createBindingStore(join(resolveDshHome(), 'g1brain', 'bindings'))
   private readonly installed = new WeakSet<Agent>()
   private readonly attaching = new WeakMap<Agent, Promise<void>>()
-  private readonly createGrants = new WeakMap<Agent, Map<string, CreateGrant>>()
-  private readonly approvingCreates = new WeakMap<Agent, Map<string, Promise<void>>>()
   private readonly writesEnabled: boolean
   private readonly client: G1BrainClient | undefined
 
@@ -276,7 +259,7 @@ export default class G1brainIntegration extends TypertRemoteService {
       .filter(tool => this.writesEnabled || !MUTATING_TOOLS.has(tool.name))
       .map((tool) => {
         const mutating = MUTATING_TOOLS.has(tool.name)
-        const originalSchema = scopedSchema(tool.inputSchema, mutating)
+        const originalSchema = scopedSchema(tool.inputSchema, mutating, DELETION_TOOLS.has(tool.name))
         return { tool, mutating, originalSchema, parameters: toHarnessToolSchema(originalSchema) }
       })
     const disposers: Array<() => void> = []
@@ -312,7 +295,8 @@ export default class G1brainIntegration extends TypertRemoteService {
                 await scope.inspect(file)
               }
             }
-            if (mutating) await this.approveWrite(tool.name, args, target, execution)
+            if (mutating && !this.writesEnabled) throw new Error('G1brain write access is unavailable')
+            if (requiresDeletionApproval(tool.name, args)) await this.approveDeletion(tool.name, args, execution)
             const result = await tool.execute(args, execution.signal)
             if (result.isError) throw new Error(result.content.map(block => block.text).join('\n'))
             return result.content.map(block => block.text).join('\n')
@@ -326,66 +310,30 @@ export default class G1brainIntegration extends TypertRemoteService {
     }
   }
 
-  private async approveWrite(name: string, args: Record<string, unknown>, target: G1brainSessionTarget, execution: {
+  private async approveDeletion(name: string, args: Record<string, unknown>, execution: {
     readonly agent?: Agent
     readonly callId: ToolExecutionInput['callId']
     readonly signal: AbortSignal
   }): Promise<void> {
     const agent = execution.agent
     if (!this.writesEnabled || agent === undefined) throw new Error('G1brain write access is unavailable')
-    if (args.confirm !== true) throw new Error('G1brain writes require confirm=true')
-    const reusable = REUSABLE_CREATE_TOOLS.has(name)
-    if (reusable) {
-      const grant = this.createGrants.get(agent)?.get(name)
-      if (grant !== undefined && grant.expiresAt > Date.now() && grant.remainingCalls > 0) {
-        grant.remainingCalls -= 1
-        return
-      }
-      const pending = this.approvingCreates.get(agent)?.get(name)
-      if (pending !== undefined) {
-        await pending
-        const sharedGrant = this.createGrants.get(agent)?.get(name)
-        if (sharedGrant === undefined || sharedGrant.expiresAt <= Date.now() || sharedGrant.remainingCalls <= 0) {
-          throw new Error('G1brain Session creation grant is unavailable or exhausted')
-        }
-        sharedGrant.remainingCalls -= 1
-        return
-      }
-    }
+    if (args.confirm !== true) throw new Error('G1brain deletions and replacement imports require confirm=true')
     const preview = { ...args }
     if ('package' in preview) preview.package = '[ontology package payload]'
-    const scope = reusable
-      ? `仅当前会话的 ${name}，绑定目标 ${JSON.stringify(target)}；30 分钟内最多 ${CREATE_GRANT_MAX_CALLS} 次。更新、删除、上传和整包导入仍逐次审批。`
-      : '仅允许本次工具调用。'
-    const decision = this.ctx.approval.request({
+    const replacing = name === 'g1brain_import_ontology_package'
+    const scope = '仅允许本次删除操作；不会授权后续删除。'
+    const outcome = await this.ctx.approval.request({
       agent,
       toolName: name,
       callId: execution.callId,
-      reason: `确认执行 G1brain 写入：${name} ${JSON.stringify(preview).slice(0, 2000)}。授权范围：${scope}`,
+      reason: `确认执行 G1brain 删除${replacing ? '（替换导入可能删除已有内容）' : ''}：${name} ${JSON.stringify(preview).slice(0, 2000)}。${scope}`,
       displayReason: {
-        zh: `确认 G1brain 写入：${name} ${JSON.stringify(preview).slice(0, 1200)}。${scope}`,
-        en: `Approve G1brain write: ${name} ${JSON.stringify(preview).slice(0, 1200)}. ${reusable
-          ? `Allow this same tool only in the current bound Session, up to ${CREATE_GRANT_MAX_CALLS} calls within 30 minutes. Updates, deletes, uploads and package imports still require individual approval.`
-          : 'Allow this call only.'}`,
+        zh: `确认 G1brain 删除${replacing ? '（替换导入可能删除已有内容）' : ''}：${name} ${JSON.stringify(preview).slice(0, 1200)}。${scope}`,
+        en: `Approve G1brain deletion${replacing ? ' (replacement import may remove existing content)' : ''}: ${name} ${JSON.stringify(preview).slice(0, 1200)}. Allow this deletion only; later deletions require separate approval.`,
       },
       signal: execution.signal,
     })
-    const approved = decision.then((outcome) => {
-      if (outcome !== 'allowed-once') throw new Error(`G1brain write was not approved: ${outcome}`)
-      if (reusable) {
-        let grants = this.createGrants.get(agent)
-        if (grants === undefined) { grants = new Map(); this.createGrants.set(agent, grants) }
-        grants.set(name, { expiresAt: Date.now() + CREATE_GRANT_DURATION_MS, remainingCalls: CREATE_GRANT_MAX_CALLS - 1 })
-      }
-    })
-    if (!reusable) { await approved; return }
-    let pending = this.approvingCreates.get(agent)
-    if (pending === undefined) { pending = new Map(); this.approvingCreates.set(agent, pending) }
-    pending.set(name, approved)
-    try { await approved }
-    finally {
-      if (pending.get(name) === approved) pending.delete(name)
-    }
+    if (outcome !== 'allowed-once') throw new Error(`G1brain deletion was not approved: ${outcome}`)
   }
 
   /** Report whether Host-side API credentials are configured without returning them.

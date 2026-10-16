@@ -1,4 +1,3 @@
-import { readFile } from 'node:fs/promises'
 import { setTimeout as delay } from 'node:timers/promises'
 import type { G1BrainClient } from '../g1brain/client.ts'
 import { ScopeError } from '../errors.ts'
@@ -18,6 +17,11 @@ export interface BridgeContext {
   client: G1BrainClient
   scope?: WorkspaceScope
   task?: PreparedTask
+}
+
+const documentCollection = {
+  type: 'string', minLength: 1,
+  description: '文档库集合的 API name，普通会话先列出文档库取其 name；绑定会话取自 g1brain_context.task.documentLibraryName 或 createDocumentLibraryName。不是本体集合名、领域名或 displayName。',
 }
 
 function text(value: unknown): ToolResult {
@@ -164,14 +168,14 @@ export function createG1BrainTools(context: BridgeContext): ToolDefinition[] {
     },
     {
       name: 'g1brain_list_selected_files',
-      description: '列出用户选择的本地资料目录中的可处理文件。',
+      description: '列出所选本地资料目录中的文件及格式；DOC、PDF 和 PowerPoint 原件须先转换为支持的 DOCX、XLSX 或 UTF-8 Markdown。',
       inputSchema: { type: 'object', properties: {}, additionalProperties: false },
       execute: () => withToolError(async () => text((await scope().listFiles())
         .map(({ relativePath, size, extension }) => ({ relativePath, size, extension })))),
     },
     {
       name: 'g1brain_read_selected_file',
-      description: '读取用户选择目录内的文本文件，path 必须是相对路径。',
+      description: '读取所选目录内的 UTF-8/带 BOM 的 UTF-16 文本，或提取 DOCX、XLSX、XLS 的正文与表格（Excel 按工作表分组）。不执行宏、公式或图片 OCR；DOC/PDF/PPT 须先转换，不能按文本解码。path 必须是相对路径；maxBytes 限制提取后完整正文的 UTF-8 字节数，超限时报错，不返回截断内容。',
       inputSchema: {
         type: 'object',
         properties: { path: { type: 'string' }, maxBytes: { type: 'integer', minimum: 1, maximum: 5000000 } },
@@ -208,7 +212,7 @@ export function createG1BrainTools(context: BridgeContext): ToolDefinition[] {
       description: '列出指定文档库中的文件。',
       inputSchema: {
         type: 'object',
-        properties: { collectionName: { type: 'string', minLength: 1 } },
+        properties: { collectionName: documentCollection },
         required: ['collectionName'],
         additionalProperties: false,
       },
@@ -217,11 +221,11 @@ export function createG1BrainTools(context: BridgeContext): ToolDefinition[] {
     },
     {
       name: 'g1brain_upload_selected_files',
-      description: '把明确列出的相对路径文件上传到当前会话绑定的 G1brain 文档库。上传后须提交 MD 切片任务，再提交文件片段的关键词、向量化或索引任务；上传本身不代表可检索。',
+      description: '将明确列出的文件先提取为 UTF-8 Markdown，再上传到绑定文档库；支持文本、DOCX、XLSX、XLS。非 Markdown 文件保留原文件名并追加 .md；原文件不变。所有文件均解析成功且上传名称不冲突后才开始上传，不会将 Office 二进制当正文上传。上传后须提交 MD 切片任务，再提交 CHUNK 关键词、向量化或索引任务；上传本身不代表可检索。',
       inputSchema: {
         type: 'object',
         properties: {
-          collectionName: { type: 'string', minLength: 1 },
+          collectionName: documentCollection,
           files: { type: 'array', items: { type: 'string' } },
         },
         required: ['collectionName', 'files'],
@@ -232,12 +236,11 @@ export function createG1BrainTools(context: BridgeContext): ToolDefinition[] {
           const collectionName = requiredString(args, 'collectionName')
           const requested = filesArgument(args)
           if (requested === undefined || requested.length === 0) throw new Error('必须明确列出至少一个相对路径文件')
-          const selected = await Promise.all(requested.map(path => scope().inspect(path)))
-          const results: Array<{ path: string; result: unknown }> = []
+          const selected = await scope().prepareUploads(requested)
+          const results: Array<{ path: string; uploadName: string; result: unknown }> = []
           for (const file of selected) {
-            const bytes = await readFile(file.absolutePath)
-            const result = await client.uploadMdFile(collectionName, file.relativePath, bytes)
-            results.push({ path: file.relativePath, result })
+            const result = await client.uploadMdFile(collectionName, file.uploadName, file.contents)
+            results.push({ path: file.path, uploadName: file.uploadName, result })
           }
           return text({ uploaded: results.length, results })
         }),
@@ -246,7 +249,7 @@ export function createG1BrainTools(context: BridgeContext): ToolDefinition[] {
       name: 'g1brain_submit_document_task',
       description: '为当前文档库提交处理任务。先以 MD 执行切片，再以 CHUNK 执行关键词、向量化及索引创建；可选择当前库所有文件，或指定已列出的文件 ID。提交后用任务详情确认完成，失败时修正后重新提交。',
       inputSchema: { type: 'object', properties: {
-        collectionName: { type: 'string', minLength: 1 },
+        collectionName: documentCollection,
         type: { type: 'string', enum: ['MD', 'CHUNK'] },
         fileSelection: { type: 'string', enum: ['all', 'selected'] },
         mdIds: { type: 'array', items: { type: 'integer', minimum: 1 } },
@@ -276,7 +279,7 @@ export function createG1BrainTools(context: BridgeContext): ToolDefinition[] {
       name: 'g1brain_list_document_tasks',
       description: '列出当前文档库的处理任务及整体状态。返回摘要；需要单个任务详情时使用任务 ID 查询。',
       inputSchema: { type: 'object', properties: {
-        collectionName: { type: 'string', minLength: 1 }, limit: { type: 'integer', minimum: 1, maximum: 100 },
+        collectionName: documentCollection, limit: { type: 'integer', minimum: 1, maximum: 100 },
       }, required: ['collectionName'], additionalProperties: false },
       execute: args => withToolError(async () => text(taskListResult(
         await client.listMdTasks(requiredString(args, 'collectionName')), optionalNumber(args, 'limit') ?? 30,
@@ -286,7 +289,7 @@ export function createG1BrainTools(context: BridgeContext): ToolDefinition[] {
       name: 'g1brain_list_document_task_history',
       description: '列出当前文档库的历史处理任务及整体状态。',
       inputSchema: { type: 'object', properties: {
-        collectionName: { type: 'string', minLength: 1 }, limit: { type: 'integer', minimum: 1, maximum: 100 },
+        collectionName: documentCollection, limit: { type: 'integer', minimum: 1, maximum: 100 },
       }, required: ['collectionName'], additionalProperties: false },
       execute: args => withToolError(async () => text(taskListResult(
         await client.listMdTaskHistory(requiredString(args, 'collectionName')), optionalNumber(args, 'limit') ?? 30,
@@ -296,7 +299,7 @@ export function createG1BrainTools(context: BridgeContext): ToolDefinition[] {
       name: 'g1brain_get_document_task',
       description: '按任务 ID 查询当前文档库处理任务的整体状态、处理数量和错误。',
       inputSchema: { type: 'object', properties: {
-        collectionName: { type: 'string', minLength: 1 }, taskId: { type: 'string', minLength: 1 },
+        collectionName: documentCollection, taskId: { type: 'string', minLength: 1 },
       }, required: ['collectionName', 'taskId'], additionalProperties: false },
       execute: args => withToolError(async () => text(documentTaskSummary(await client.getMdTask(
         requiredString(args, 'collectionName'), requiredString(args, 'taskId'),
@@ -306,7 +309,7 @@ export function createG1BrainTools(context: BridgeContext): ToolDefinition[] {
       name: 'g1brain_get_document_task_file_statuses',
       description: '按任务 ID 查询当前文档库中每个文件的处理步骤状态；结果最多返回 100 个文件，可用 fileId 聚焦。',
       inputSchema: { type: 'object', properties: {
-        collectionName: { type: 'string', minLength: 1 }, taskId: { type: 'string', minLength: 1 },
+        collectionName: documentCollection, taskId: { type: 'string', minLength: 1 },
         fileId: { type: 'integer', minimum: 1 }, limit: { type: 'integer', minimum: 1, maximum: 100 },
       }, required: ['collectionName', 'taskId'], additionalProperties: false },
       execute: args => withToolError(async () => {
@@ -323,7 +326,7 @@ export function createG1BrainTools(context: BridgeContext): ToolDefinition[] {
       name: 'g1brain_wait_document_task',
       description: '等待当前文档库指定处理任务结束，最长 60 秒；超时后返回最新状态，可继续查询或再次等待。',
       inputSchema: { type: 'object', properties: {
-        collectionName: { type: 'string', minLength: 1 }, taskId: { type: 'string', minLength: 1 },
+        collectionName: documentCollection, taskId: { type: 'string', minLength: 1 },
         maxWaitSeconds: { type: 'integer', minimum: 1, maximum: 60 },
       }, required: ['collectionName', 'taskId'], additionalProperties: false },
       execute: (args, signal) => withToolError(async () => {
@@ -346,9 +349,9 @@ export function createG1BrainTools(context: BridgeContext): ToolDefinition[] {
     },
     {
       name: 'g1brain_cancel_document_task',
-      description: '取消当前文档库指定的运行中处理任务；此操作需要单次人工审批。',
+      description: '取消当前文档库指定的运行中处理任务，不删除文档；无需额外审批。',
       inputSchema: { type: 'object', properties: {
-        collectionName: { type: 'string', minLength: 1 }, taskId: { type: 'string', minLength: 1 },
+        collectionName: documentCollection, taskId: { type: 'string', minLength: 1 },
       }, required: ['collectionName', 'taskId'], additionalProperties: false },
       execute: args => withToolError(async () => text(await client.cancelMdTask(
         requiredString(args, 'collectionName'), requiredString(args, 'taskId'),
@@ -360,7 +363,7 @@ export function createG1BrainTools(context: BridgeContext): ToolDefinition[] {
       inputSchema: {
         type: 'object',
         properties: {
-          collectionName: { type: 'string', minLength: 1 },
+          collectionName: documentCollection,
           query: { type: 'string', minLength: 1 },
         },
         required: ['collectionName', 'query'],
@@ -378,7 +381,7 @@ export function createG1BrainTools(context: BridgeContext): ToolDefinition[] {
       inputSchema: {
         type: 'object',
         properties: {
-          collectionName: { type: 'string', minLength: 1 },
+          collectionName: documentCollection,
           fileName: { type: 'string', minLength: 1 },
           text: { type: 'string' },
           headings: { type: 'array', items: { type: 'string' } },
@@ -403,7 +406,7 @@ export function createG1BrainTools(context: BridgeContext): ToolDefinition[] {
       description: '获取指定文档库的所有文档切片分块信息。',
       inputSchema: {
         type: 'object',
-        properties: { collectionName: { type: 'string', minLength: 1 } },
+        properties: { collectionName: documentCollection },
         required: ['collectionName'],
         additionalProperties: false,
       },
@@ -418,7 +421,7 @@ export function createG1BrainTools(context: BridgeContext): ToolDefinition[] {
       inputSchema: {
         type: 'object',
         properties: {
-          collectionName: { type: 'string', minLength: 1 },
+          collectionName: documentCollection,
           query: { type: 'string', minLength: 1 },
         },
         required: ['collectionName', 'query'],
@@ -916,21 +919,21 @@ export function createG1BrainTools(context: BridgeContext): ToolDefinition[] {
     },
     {
       name: 'g1brain_import_ontology_package',
-      description: '将本体包写入线上集合；必须显式传入 confirm=true。',
+      description: '将本体包写入线上集合。追加导入无需额外确认；replace=true 可能删除已有内容，须传 confirm=true 并通过删除审批。',
       inputSchema: {
         type: 'object',
         properties: {
           collectionName: { type: 'string', minLength: 1 },
           package: { type: 'object' },
           replace: { type: 'boolean' },
-          confirm: { type: 'boolean' },
+          confirm: { type: 'boolean', description: '仅 replace=true 时必需；表示请求替换导入，由 Harness 获取删除审批。' },
         },
-        required: ['collectionName', 'package', 'confirm'],
+        required: ['collectionName', 'package'],
         additionalProperties: false,
       },
       execute: args =>
         withToolError(async () => {
-          requiredBoolean(args, 'confirm')
+          if (args.replace === true) requiredBoolean(args, 'confirm')
           return text(
             await client.importOntologyPackage(
               requiredString(args, 'collectionName'),

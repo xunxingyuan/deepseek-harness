@@ -1,6 +1,6 @@
 import type { PreparedTask } from '../types.ts'
 
-/** G1brain operations that change remote state and require explicit approval. */
+/** G1brain operations that require write access to the bound resources. */
 export const MUTATING_TOOLS = new Set([
   'g1brain_create_document_library', 'g1brain_upload_selected_files',
   'g1brain_submit_document_task', 'g1brain_cancel_document_task',
@@ -16,17 +16,36 @@ export const MUTATING_TOOLS = new Set([
   'g1brain_update_agent', 'g1brain_publish_agent',
 ])
 
-/** Add the explicit confirmation argument to a mutating tool schema.
+/** Explicit deletion tools whose calls each need a human approval. */
+export const DELETION_TOOLS = new Set([
+  'g1brain_delete_ontology_entity', 'g1brain_delete_ontology_relation',
+  'g1brain_delete_ontology_property', 'g1brain_delete_ontology_relation_type',
+])
+
+/** Determine whether a call can delete existing G1brain data.
+ * @param name - exact registered tool name.
+ * @param args - validated arguments, including the package replacement switch.
+ * @returns true for explicit deletions or replacement imports.
+ */
+export function requiresDeletionApproval(name: string, args: Record<string, unknown>): boolean {
+  return DELETION_TOOLS.has(name) || (name === 'g1brain_import_ontology_package' && args.replace === true)
+}
+
+/** Preserve legacy confirmation arguments while requiring them only for deletions.
  * @param schema - original legacy tool input schema.
  * @param mutating - whether the tool changes remote state.
- * @returns the required-confirmation schema for writes, otherwise the original schema.
+ * @param deletion - whether this tool always deletes existing data.
+ * @returns a write schema with optional compatibility confirmation or required deletion intent.
  */
-export function scopedSchema(schema: Record<string, unknown>, mutating: boolean): Record<string, unknown> {
+export function scopedSchema(schema: Record<string, unknown>, mutating: boolean, deletion = false): Record<string, unknown> {
   if (!mutating) return schema
+  const properties = schema.properties as Record<string, unknown>
   return {
     ...schema,
-    properties: { ...(schema.properties as Record<string, unknown>), confirm: { type: 'boolean', const: true, description: '已向用户说明此次变更并获得确认；Harness 仍会独立请求审批。' } },
-    required: [...new Set([...(schema.required as string[] | undefined ?? []), 'confirm'])],
+    properties: { ...properties, confirm: deletion
+      ? { type: 'boolean', const: true, description: '标记此次删除请求；用户授权由 Harness 审批取得，无需先单独发起聊天确认。' }
+      : properties.confirm ?? { type: 'boolean', description: '兼容旧会话参数；新增和非删除修改无需用户确认。' } },
+    required: [...new Set([...(schema.required as string[] | undefined ?? []), ...(deletion ? ['confirm'] : [])])],
   }
 }
 

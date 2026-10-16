@@ -25,9 +25,11 @@ kind: "package-reference"
 
 本地开发桌面版或带有明确标记的未签名测试安装包会提供 `G1BRAIN_BASE_URL`（`http://192.168.100.113:19091`）、`G1BRAIN_LOCAL_USER_ID`（`developer`）、`G1BRAIN_LOCAL_CLIENT_ID`（`g1brain-web`）、`G1BRAIN_ALLOW_LOCAL_DEV=1` 和 `G1BRAIN_ALLOW_DEV_WRITES=1`；环境变量可覆盖这些默认值。宿主会沿用旧客户端的 `X-User-Id`、`X-Client-Id` 请求头；此测试身份与登录时输入的用户名无关。开发和未签名测试配置均启用写入，并不代表登录用户的真实授权。其他部署须自行配置服务地址和认证参数。OAuth 模式需设置 `G1BRAIN_ACCESS_TOKEN` 与 `G1BRAIN_CLIENT_SECRET`（可选设置 `G1BRAIN_CLIENT_ID`）；宿主会发送 Basic 认证与 `Blade-Auth`。`G1BRAIN_TENANT_ID` 默认是 `000000`。没有对应认证参数时，插件仍启用但报告 `configured: false`，目录调用会明确报错。桌面登录暂未向宿主服务传递登录身份或 OAuth 令牌。
 
-工作台为新的顶层会话调用 `bindSession`。宿主校验所选目录就是该会话的工作区，并将完整目标保存于仅所有者可读写的私有绑定文件。46 个工具只安装在对应智能体范围；恢复智能体时重新读取绑定。工具执行时再次检查会话、目标、原始输入结构和目录范围。写入必须提供 `confirm=true`。7 种新增类工具各自在首次调用时请求用户授权：同一种工具在当前绑定会话内最多复用 100 次、有效 30 分钟；重启宿主后失效，换一种新增工具则重新询问。更新、删除、上传、文档处理任务提交/取消和整包导入仍逐次审批。上传还须明确列出文件并逐一预检路径。旧版的 5 个智能体管理工具有意不开放。
+工作台为新的顶层会话调用 `bindSession`。宿主校验所选目录就是该会话的工作区，并将完整目标保存于仅所有者可读写的私有绑定文件。46 个工具只安装在对应智能体范围；恢复智能体时重新读取绑定。工具执行时再次检查会话、目标、原始输入结构和目录范围。新增、修改、上传、文档处理任务提交/取消及追加式整包导入无需额外确认。删除和 `replace=true` 的整包导入须提供 `confirm=true`，并逐次取得 Harness 审批；此参数只表示删除意图，不代表用户已经批准。删除授权不共享、不复用。适用的非删除工具保留可选的旧版确认参数。上传仍须明确列出文件并逐一预检路径。旧版的 5 个智能体管理工具有意不开放。
 
 文档处理沿用当前 G1brain 网页的 MD 接口：上传后先提交 `MD` 切片任务并确认成功，再提交 `CHUNK` 的关键词、向量化和索引操作。提交工具可选择绑定文档库内的全部现有文件，也可指定经过该库校验的文档 ID。7 个任务工具覆盖提交、当前/历史列表、详情、逐文件状态、限时等待与取消。列表和详情只返回摘要，避免大型任务占满模型上下文。
+
+文件读取会提取 DOCX 段落与表格，以及按工作表分组的 XLSX/XLS 单元格。文本输入支持严格 UTF-8 或带 BOM 的 UTF-16；其他编码会报错，不会插入替换字符。上传复用相同解析，将 UTF-8 Markdown 而非 Office 原始二进制发送到 MD API。非 Markdown 文件保留原后缀并追加 `.md`，因此 `report.docx` 与 `report.xlsx` 不会混淆。首次请求前须确保所有文件解析成功且上传名称不重复。原文件保持不变。配置的文件大小上限同时约束 Office 解压总量和整批正文的 UTF-8 总量；读取还会独立校验请求的输出上限，不截断正文。开始上传后若 HTTP 请求失败，仍可能留下部分已上传文件。文档任务的 `collectionName` 是绑定文档库的 API 名称，不能使用本体集合、领域或显示名称。
 
 绑定存储在 POSIX 上检查私有目录权限；Windows 依赖当前用户配置目录的 ACL，不以合成的 POSIX 权限位判断。目录匹配采用对应平台的路径比较规则，包括 Windows 盘符大小写。恢复智能体时若无法读取绑定或材料目录，会使初始化失败，而非悄悄退回只读工具。
 
@@ -64,7 +66,11 @@ Use the available G1brain tools for ontology and document operations. Ordinary S
 
 If write tools are absent, explain that this Session is read-only and direct the user to prepare a G1brain build or improvement Session. Do not interpret missing write tools as missing API credentials or ask the user to install another plugin.
 
-In a prepared Session, inspect the sources, propose a plan, and use the bound G1brain tools after the user approves the plan. Tool approval remains required for writes.
+Use g1brain_read_selected_file to extract DOCX or Excel text and tables, not a raw text read of Office bytes. Upload tools extract UTF-8 Markdown before ingestion. Unsupported or encrypted files must be converted first; never upload garbled text as a successful extraction. Document uploads and processing tasks use the document library API name from the Session context, not the ontology collection name or a display name.
+
+In a prepared Session, inspect the sources and cite evidence. Execute requested creation, updates, uploads, and document processing within the bound resources without asking for extra confirmation. A request only for information or a plan is not a request to write data. Ask clarification questions only when the intended scope or business requirement is ambiguous.
+
+Deletion and replacement imports that may remove existing content require approval for each call. Set confirm=true for those calls and let Harness request approval; do not ask for a separate chat confirmation. Missing or rejected approval must prevent the deletion.
 ```
 
 #### Token 影响
@@ -93,9 +99,10 @@ In a prepared Session, inspect the sources, propose a plan, and use the bound G1
 
 <a id="known-limitations-and-deferred-work"></a>
 
-- 开发模式登录不校验身份，也不授予后端写入权限。`developer` 是共享测试身份；仅应在开发服务使用，仔细核对首次授权内容。
-- 重复新增授权限定为同一种工具和绑定会话，但宿主无法判断模型后续生成的每条记录是否符合已审核方案。如发现内容偏离，应停止本轮执行。
+- 开发模式登录不校验身份，也不授予后端写入权限。`developer` 是共享测试身份，仅应在开发服务使用。非删除写入会在所选目标范围内自动执行，请仔细选择目标。
+- 非删除操作自动执行，不代表模型生成的记录符合预期业务含义。应检查结果，发现偏离时停止执行。其他 Harness 工具（包括命令与文件操作）仍遵循各自的审批策略。
 - 提交文档任务只会安排服务端处理，并不会立即使文档可检索。须通过详情或等待工具确认 `SUCCESS` 后，才能认为切片或索引就绪。任务接口以当前 G1brain 网页为依据；插件未开放任务删除和清理。
+- Office 提取保留可读正文与表格，不保留页面版式、图表、图片或 OCR。Excel 公式使用已保存的缓存结果，或显示未计算的公式；不执行公式、宏或外部引用。旧版 DOC、PDF 与 PowerPoint 文件须先转换为支持的格式，才能由这些文件工具读取或上传。加密或损坏的 Office 文件会明确报错。文档库中已有乱码不会自动修复或覆盖。
 - 会话绑定后目标固定；切换资源需要新建会话。全局发现与检索工具可查询宿主配置身份能够访问的任意集合，但不能修改数据。
 - 通过环境变量提供的 OAuth 凭据尚未与其他宿主插件及未来子进程隔离；在实现专用凭据传递前只能使用开发凭据。
 

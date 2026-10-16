@@ -1,7 +1,9 @@
 import { realpath, readdir, readFile, stat } from 'node:fs/promises'
+import { Buffer } from 'node:buffer'
 import { extname, isAbsolute, relative, resolve, sep } from 'node:path'
 import type { ScopeFile } from '../types.ts'
 import { ScopeError } from '../errors.ts'
+import { extractMaterial } from './material.ts'
 
 const DEFAULT_EXTENSIONS = new Set([
   '.md',
@@ -78,11 +80,31 @@ class WorkspaceScopeImpl {
   }
 
   async read(relativePath: string, maxBytes = 2 * 1024 * 1024): Promise<string> {
-    const absolute = await this.resolveExisting(relativePath)
-    const info = await stat(absolute)
-    if (!info.isFile()) throw new ScopeError('目标不是文件', relativePath)
-    if (info.size > maxBytes) throw new ScopeError(`文件超过读取上限（${maxBytes} bytes）`, relativePath)
-    return readFile(absolute, 'utf8')
+    const file = await this.inspect(relativePath)
+    const bytes = await readFile(file.absolutePath)
+    if (bytes.length > this.options.maxFileBytes) throw new ScopeError('文件超过大小上限', relativePath)
+    try {
+      return await extractMaterial(bytes, file.extension, maxBytes, this.options.maxFileBytes)
+    } catch (error) {
+      throw new ScopeError(`${relativePath} 正文提取失败：${error instanceof Error ? error.message : String(error)}`, relativePath)
+    }
+  }
+
+  async prepareUploads(paths: string[]): Promise<Array<{ path: string; uploadName: string; contents: string }>> {
+    const files = []
+    const names = new Set<string>()
+    let total = 0
+    for (const path of paths) {
+      const contents = await this.read(path, this.options.maxFileBytes)
+      const canonical = relative(this.rootPath, await this.resolveExisting(path)).replaceAll('\\', '/')
+      const uploadName = /\.(?:md|markdown)$/i.test(canonical) ? canonical : `${canonical}.md`
+      if (names.has(uploadName)) throw new ScopeError(`上传名称重复：${uploadName}`, path)
+      names.add(uploadName)
+      total += Buffer.byteLength(contents, 'utf8')
+      if (total > this.options.maxFileBytes) throw new ScopeError('本批次正文总量超过文件大小上限；请分批上传', path)
+      files.push({ path, uploadName, contents })
+    }
+    return files
   }
 
   async listFiles(): Promise<ScopeFile[]> {

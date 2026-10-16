@@ -259,7 +259,7 @@ class G1BrainClientImpl {
   async uploadMdFile(collectionName: string, fileName: string, contents: Uint8Array | string): Promise<unknown> {
     const form = new FormData()
     const bytes = typeof contents === 'string' ? new TextEncoder().encode(contents) : contents
-    const file = new File([bytes as BlobPart], fileName, { type: 'application/octet-stream' })
+    const file = new File([bytes as BlobPart], fileName, { type: typeof contents === 'string' ? 'text/markdown; charset=utf-8' : 'application/octet-stream' })
     form.append('file', file)
     return this.request(`/mdApi/v1/md/collections/${encodeURIComponent(collectionName)}/mds`, {
       method: 'POST',

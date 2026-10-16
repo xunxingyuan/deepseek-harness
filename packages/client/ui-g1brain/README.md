@@ -45,7 +45,7 @@ The panel implementation is in `src/client/G1brainHome.tsx`. Resource catalogs a
 
 #### What the model sees
 
-The browser plugin registers no tools. A prepared draft becomes an ordinary user message only when the user submits it in the `Session`. It asks the model to follow the current request's language, including progress, questions, and the final result. The Host uses the durable binding to add scoped G1brain tools to that Session's agent; writes require explicit confirmation, with bounded same-tool approval reuse for creation and individual approval for other writes.
+The browser plugin registers no tools. A prepared draft becomes an ordinary user message only when the user submits it in the `Session`. It asks the model to follow the current request's language, including progress, questions, and the final result. The Host uses the durable binding to add scoped G1brain tools to that Session's agent. The draft permits non-deletion operations within the selected resources without extra confirmation; deletion and replacement imports that may remove content require individual Harness approval, without a separate chat confirmation.
 
 #### Token effect
 
