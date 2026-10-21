@@ -4,6 +4,7 @@ import { lstat, mkdir, readFile, realpath, stat, writeFile } from 'node:fs/promi
 import { isAbsolute, join, relative } from 'node:path'
 import type { SessionId } from '@deepseek-ai/dsh-session/types'
 import type { G1brainSessionTarget } from './types.ts'
+import { isSystemDomain, resourceName } from './names.ts'
 
 interface BindingSession {
   readonly id: SessionId
@@ -37,6 +38,11 @@ function targetOf(value: G1brainSessionTarget): G1brainSessionTarget {
   const createDocumentLibraryName = name(value.createDocumentLibraryName, 'createDocumentLibraryName')
   const domainName = name(value.domainName, 'domainName')
   const createDomainName = name(value.createDomainName, 'createDomainName')
+  const createOntologyCollectionDisplayName = name(value.createOntologyCollectionDisplayName, 'createOntologyCollectionDisplayName')
+  const createDomainDisplayName = name(value.createDomainDisplayName, 'createDomainDisplayName')
+  if ((createOntologyCollectionDisplayName && !createOntologyCollectionName) || (createDomainDisplayName && !createDomainName)) {
+    throw new Error('G1brain display names require a new resource target')
+  }
   if ((value.mode === 'new-ontology' && (!createOntologyCollectionName || ontologyCollectionName))
     || (value.mode === 'update-ontology' && (!ontologyCollectionName || createOntologyCollectionName))) {
     throw new Error('G1brain ontology target does not match the selected mode')
@@ -57,6 +63,8 @@ function targetOf(value: G1brainSessionTarget): G1brainSessionTarget {
     ...(createDocumentLibraryName === undefined ? {} : { createDocumentLibraryName }),
     ...(domainName === undefined ? {} : { domainName }),
     ...(createDomainName === undefined ? {} : { createDomainName }),
+    ...(createOntologyCollectionDisplayName === undefined ? {} : { createOntologyCollectionDisplayName }),
+    ...(createDomainDisplayName === undefined ? {} : { createDomainDisplayName }),
   }
 }
 
@@ -69,7 +77,7 @@ function recordOf(value: unknown, sessionId: SessionId): BindingRecord {
     throw new Error('Invalid saved G1brain Session target')
   }
   for (const key of ['ontologyCollectionName', 'createOntologyCollectionName', 'documentLibraryName',
-    'createDocumentLibraryName', 'domainName', 'createDomainName']) {
+    'createDocumentLibraryName', 'domainName', 'createDomainName', 'createOntologyCollectionDisplayName', 'createDomainDisplayName']) {
     if (target[key] !== undefined && typeof target[key] !== 'string') throw new Error(`Invalid saved G1brain ${key}`)
   }
   const parsed: G1brainSessionTarget = {
@@ -81,6 +89,8 @@ function recordOf(value: unknown, sessionId: SessionId): BindingRecord {
     ...(typeof target.createDocumentLibraryName === 'string' ? { createDocumentLibraryName: target.createDocumentLibraryName } : {}),
     ...(typeof target.domainName === 'string' ? { domainName: target.domainName } : {}),
     ...(typeof target.createDomainName === 'string' ? { createDomainName: target.createDomainName } : {}),
+    ...(typeof target.createOntologyCollectionDisplayName === 'string' ? { createOntologyCollectionDisplayName: target.createOntologyCollectionDisplayName } : {}),
+    ...(typeof target.createDomainDisplayName === 'string' ? { createDomainDisplayName: target.createDomainDisplayName } : {}),
   }
   return { version: 1, sessionId, target: targetOf(parsed) }
 }
@@ -104,7 +114,18 @@ class BindingStore {
     if (session.header.parentSession !== undefined) throw new Error('Bind the top-level Harness Session, not a child')
     const folderPath = await canonicalDirectory(session)
     if (relative(folderPath, await realpath(input.folderPath)) !== '') throw new Error('Selected directory differs from the Session Workspace')
-    const target = targetOf({ ...input, folderPath })
+    const selected = targetOf({ ...input, folderPath })
+    if (selected.domainName && isSystemDomain(selected.domainName)) throw new Error('G1brain system domains cannot be selected for improvement')
+    const target = targetOf({ ...selected,
+      ...(selected.createOntologyCollectionName === undefined ? {} : {
+        createOntologyCollectionName: resourceName(selected.createOntologyCollectionName, 'col', session.id),
+        createOntologyCollectionDisplayName: selected.createOntologyCollectionDisplayName ?? selected.createOntologyCollectionName,
+      }),
+      ...(selected.createDomainName === undefined ? {} : {
+        createDomainName: resourceName(selected.createDomainName, 'dom', session.id),
+        createDomainDisplayName: selected.createDomainDisplayName ?? selected.createDomainName,
+      }),
+    })
     const record: BindingRecord = { version: 1, sessionId: session.id, target }
     await mkdir(this.directory, { recursive: true, mode: 0o700 })
     const info = await lstat(this.directory)

@@ -79,6 +79,8 @@
 .footer p { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; margin: 7px 0; color: var(--dsw-alias-label-primary); font-size: 13px; }
 .footer small { color: var(--dsw-alias-label-secondary); font-size: 11px; }
 .footer button { flex: none; }
+.footerActions { display: flex; flex: 0 0 auto; flex-direction: column; align-items: flex-end; max-width: 320px; }
+.footer .validation { min-height: 18px; margin: 0 0 8px; overflow: visible; white-space: normal; color: var(--dsw-alias-label-secondary); font-size: 12px; line-height: 1.5; }
 .error { color: var(--dsw-alias-state-error-primary); font-size: 12px; }
-@media (max-width: 690px) { .overviewGrid, .choiceGrid { grid-template-columns: 1fr; } .startPanel, .footer { flex-direction: column; align-items: stretch; } .footer button { align-self: flex-start; } }
+@media (max-width: 690px) { .overviewGrid, .choiceGrid { grid-template-columns: 1fr; } .startPanel, .footer { flex-direction: column; align-items: stretch; } .footerActions { align-items: flex-start; max-width: none; } .footer button { align-self: flex-start; } }
 @media (max-width: 420px) { .assetMap { height: 320px; } .mapNode { width: 46%; min-height: 100px; } .mapHub { width: 68px; height: 68px; } .mapHub svg { width: 25px; height: 25px; } .assetGallery { grid-template-columns: 1fr; } }

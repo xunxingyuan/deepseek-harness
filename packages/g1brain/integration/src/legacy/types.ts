@@ -59,8 +59,10 @@ export interface PreparedTask {
   createDocumentLibraryName?: string
   ontologyCollectionName?: string
   createOntologyCollectionName?: string
+  createOntologyCollectionDisplayName?: string
   domainName?: string
   createDomainName?: string
+  createDomainDisplayName?: string
   instruction: string
 }
 

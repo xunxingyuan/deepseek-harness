@@ -1,6 +1,7 @@
 /**
- * Plugin manager, browser half: the **Plugins** entry of the sidebar and the
- * management page it opens in the main column. The page installs, enables,
+ * Plugin manager, browser half: the management page in the main column.
+ * G1brain hides its sidebar entry while retaining programmatic navigation.
+ * The page installs, enables,
  * disables, and removes the bundles of the Host's profile through the
  * `pluginManager` Remote and switches their rows in the profile's user layer.
  * A plugin that carries its own configuration renders it on this page through
@@ -10,8 +11,7 @@ import type {} from '@deepseek-ai/dsh-client-product-analytics/client'
 import type {} from '@deepseek-ai/dsh-client-locale/client'
 import type { Context as ClientContext } from '@deepseek-ai/cordis'
 // Type-only: the root `main` keyed slot the page registers into, declared by
-// ui-layout with the panel id brand, and the `sidebar.panellist` list the
-// entry registers into, declared by ui-sidebar.
+// ui-layout with the panel id brand.
 import type { MainPanelId } from '@deepseek-ai/dsh-client-ui-layout/client'
 import type {} from '@deepseek-ai/dsh-client-ui-sidebar/client'
 import type {} from '@deepseek-ai/dsh-client-ui-renderer/client'
@@ -22,7 +22,6 @@ import type {} from '@deepseek-ai/dsh-api-remotes/client'
 import type {} from '@deepseek-ai/dsh-plugin-manager/types'
 import { PluginManagerPage } from './PluginManagerPage.tsx'
 import { PluginRefreshToast, type PluginRefreshToastFace } from './PluginRefreshToast.tsx'
-import { PluginsPanelIcon } from './PluginsPanelIcon.tsx'
 import { configLedgerSource } from './config-ledger.ts'
 import { PluginManagerController } from './manager-store.ts'
 import { en, zh, type PluginManagerLocaleKey } from './locales.ts'
@@ -75,7 +74,6 @@ export const inject = ['slots', 'locale', 'remote', 'remote.pluginManager', 'rem
  */
 export function apply(ctx: ClientContext): void {
   ctx.effect(() => ctx.locale.register(NS, { zh, en }), 'ui-plugin-manager: dictionaries')
-  const t = ctx.locale.bind(NS)
   const controller = new PluginManagerController(ctx)
   ctx.effect(() => () => { controller.dispose() }, 'ui-plugin-manager: controller')
   // The Host says when what is installed, enabled, or composed changed — from
@@ -95,7 +93,7 @@ export function apply(ctx: ClientContext): void {
   }, 'ui-plugin-manager: host invalidations')
 
   // The page is a global panel: it belongs to the profile, not to a Session,
-  // and the sidebar's entry selects it. What is installed and switched on is
+  // and pluginNavigation can select it. What is installed and switched on is
   // the page's own; a plugin's configuration arrives through the slots the
   // page declares here, so the page never names a configurable plugin.
   const configLedger = configLedgerSource(ctx)
@@ -138,12 +136,4 @@ export function apply(ctx: ClientContext): void {
     })
     yield () => { void disposeNavigation() }
   })
-  ctx.slots.inject('sidebar.panellist', () => ctx.slots.register({
-    name: 'sidebar.panellist',
-    id: PANEL_ID,
-    order: 0,
-    label: () => t('panel'),
-    locale: NS,
-  }, PluginsPanelIcon))
-
 }

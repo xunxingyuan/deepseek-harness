@@ -3,6 +3,7 @@ import type { G1BrainClient } from '../g1brain/client.ts'
 import { ScopeError } from '../errors.ts'
 import type { DocumentTaskSubmission, PreparedTask, ToolResult } from '../types.ts'
 import type { WorkspaceScope } from './scope.ts'
+import { requireResourceName, resourceName } from '../../names.ts'
 
 /** Model-facing legacy G1brain operation before Harness registration. */
 export interface ToolDefinition {
@@ -441,20 +442,24 @@ export function createG1BrainTools(context: BridgeContext): ToolDefinition[] {
     },
     {
       name: 'g1brain_create_ontology_collection',
-      description: '创建一个 G1brain 本体集合。',
+      description: '创建本体集合。绑定会话必须使用 g1brain_context 中的 createOntologyCollectionName，中文名称保存在 displayName，不得作为后续 API 标识。',
       inputSchema: {
         type: 'object',
         properties: {
           name: { type: 'string', minLength: 1 },
+          displayName: { type: 'string', minLength: 1 },
           description: { type: 'string' },
         },
         required: ['name'],
         additionalProperties: false,
       },
-      execute: args =>
-        withToolError(async () =>
-          text(await client.createOntologyCollection(requiredString(args, 'name'), optionalString(args, 'description') ?? '')),
-        ),
+      execute: args => withToolError(async () => {
+        const requested = requiredString(args, 'name')
+        const name = context.task ? requireResourceName(requested) : resourceName(requested, 'col')
+        const displayName = context.task?.createOntologyCollectionDisplayName ?? optionalString(args, 'displayName') ?? requested
+        const result = await client.createOntologyCollection(name, optionalString(args, 'description') ?? '', displayName)
+        return text({ name, displayName, result })
+      }),
     },
     {
       name: 'g1brain_list_ontology_domains',
@@ -470,25 +475,24 @@ export function createG1BrainTools(context: BridgeContext): ToolDefinition[] {
     },
     {
       name: 'g1brain_create_ontology_domain',
-      description: '创建一个 G1brain 本体领域。',
+      description: '创建本体领域。绑定会话必须使用 g1brain_context 中的 createDomainName；中文显示名保存在领域配置中，后续操作仍使用 API name。',
       inputSchema: {
         type: 'object',
         properties: {
           collectionName: { type: 'string', minLength: 1 },
           name: { type: 'string', minLength: 1 },
+          displayName: { type: 'string', minLength: 1 },
         },
         required: ['collectionName', 'name'],
         additionalProperties: false,
       },
-      execute: args =>
-        withToolError(async () =>
-          text(
-            await client.createOntologyDomain(
-              requiredString(args, 'collectionName'),
-              requiredString(args, 'name'),
-            ),
-          ),
-        ),
+      execute: args => withToolError(async () => {
+        const requested = requiredString(args, 'name')
+        const name = context.task ? requireResourceName(requested) : resourceName(requested, 'dom')
+        const displayName = context.task?.createDomainDisplayName ?? optionalString(args, 'displayName') ?? requested
+        const result = await client.createOntologyDomain(requiredString(args, 'collectionName'), name, displayName)
+        return text({ name, displayName, result })
+      }),
     },
     // --- P0: Ontology Query, Detail, Relations & Export ---
     {

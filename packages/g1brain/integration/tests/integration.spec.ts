@@ -84,7 +84,7 @@ describe('G1brain desktop integration', () => {
     vi.stubGlobal('fetch', fetcher)
     const { service } = await integration('http://127.0.0.1:18203/')
     expect(await service.listOntologyDomains('已有本体')).toEqual([
-      { name: '设备领域', displayName: '设备运维领域' }, { name: '_schema' },
+      { name: '设备领域', displayName: '设备运维领域' },
     ])
     expect(fetcher.mock.calls[0]?.[0].href).toContain('/domains?view=detail')
   })

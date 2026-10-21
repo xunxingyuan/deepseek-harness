@@ -1,5 +1,5 @@
 ---
-description: "从 Web 侧栏管理 profile 的插件组合包、它们的行，以及插件的配置。"
+description: "管理 profile 的插件组合包及配置，G1brain 侧栏入口暂时隐藏。"
 kind: "package-reference"
 ---
 
@@ -11,7 +11,7 @@ kind: "package-reference"
 
 ## 概述
 
-使用 Web 侧栏的**插件**入口管理 profile 已安装的组合包，以及安装随附、默认关闭的官方组合包。可以启停组合包及其行、在 Host 读出 spec 指向什么之后安装组合包、查看 pnpm 输出、停止一次运行，并启用它新增的包。卸载会要求确认。注册了配置页的插件在这里、在它自己的页面上编辑；设置里只保留只读的插件列表。
+插件管理页面可管理 profile 已安装的组合包，以及安装随附、默认关闭的官方组合包。可以启停组合包及其行、在 Host 读出 spec 指向什么之后安装组合包、查看 pnpm 输出、停止一次运行，并启用它新增的包。卸载会要求确认。注册了配置页的插件在这里、在它自己的页面上编辑；设置里只保留只读的插件列表。
 
 ## 目录
 
@@ -27,7 +27,7 @@ kind: "package-reference"
 <a id="use-this-package"></a>
 ## 使用本包
 
-在侧栏选择**插件**。信息按钮使用 11px 的 caption 色图标和 20px 方形悬停区域，与副标题间隔 4px。它说明当前页用于配置官方插件、安装和管理其他插件，**设置 → 内置插件**则展示内置插件列表及运行状态。悬停或聚焦显示共享 tooltip；点击后保持展开，直至再次点击、Escape、Tab 或外部点击。页面首次打开时通过 `api-remotes` 读取清单与组合包；没有受管 profile 的 Host 上页面显示为不可用。**官方**排在前面，列出安装随附、供开启的组合包——开启前保持关闭、没有卸载、属于实验性功能的带**实验性**标签——其后是注册了配置页的官方插件；**已安装**列出 profile 持有的组合包。卡片按名称排序，启停组合包不会挪动它的卡片。没有组合包 patch 的依赖不是插件，除非 profile 选中了它才会带异常标签列出。全局配置仍在设置的**内置插件**分区中编辑。
+G1brain 版本暂时隐藏侧栏的插件入口；管理页面与程序导航仍然保留。隐藏入口不会停用已安装插件或其工具。信息按钮使用 11px 的 caption 色图标和 20px 方形悬停区域，与副标题间隔 4px。它说明当前页用于配置官方插件、安装和管理其他插件，**设置 → 内置插件**则展示内置插件列表及运行状态。悬停或聚焦显示共享 tooltip；点击后保持展开，直至再次点击、Escape、Tab 或外部点击。页面首次打开时通过 `api-remotes` 读取清单与组合包；没有受管 profile 的 Host 上页面显示为不可用。**官方**排在前面，列出安装随附、供开启的组合包——开启前保持关闭、没有卸载、属于实验性功能的带**实验性**标签——其后是注册了配置页的官方插件；**已安装**列出 profile 持有的组合包。卡片按名称排序，启停组合包不会挪动它的卡片。没有组合包 patch 的依赖不是插件，除非 profile 选中了它才会带异常标签列出。全局配置仍在设置的**内置插件**分区中编辑。
 
 已安装的组合包及其插件行在卡片和详情页中，按当前界面语言显示各自的标题与描述。每个字段先读取导出的 locale `meta`，缺失时回退到包根插件可访问的 `package.json`，子路径插件从不读取；标题最终使用完整包名或模块名，两处都没有描述时不提供包描述。作者格式见[插件展示元信息](../../../docs/cookbook/adding-a-package.zh.md#plugin-display-metadata)。组合包卡片、详情和组件行显示包根的清单 `icon` 或导出的 `./icon`，或子路径插件导出的 `<子路径>/icon`；未声明或无法解码时保留默认插画。安装预览仍使用注册表或 manifest 信息。
 
@@ -106,7 +106,7 @@ ctx.slots.inject('plugins.detail.section', () => ctx.slots.register({
 
 Host 入口通过生成的 Remote 接口暴露 `pluginRegistryProbe.fastest()`，共享进行中的比较、让缓存按时过期，并在卸载时中止和等待未完成探测。卸载后调用会返回拒绝的 Promise。
 
-浏览器插件通过 `ctx.slots.inject()` 注册 `plugins` 侧栏入口与它的 `main` 面板，使两者跟随 slot 延迟声明、本地化变化与销毁。页面为全局页面，不属于任何 Session。显示文本来自包元信息与页面字典。
+浏览器插件通过 `ctx.slots.inject()` 注册 `plugins` 主面板，不注册侧栏入口；页面跟随 slot 延迟声明、本地化变化与销毁。页面为全局页面，不属于任何 Session。显示文本来自包元信息与页面字典。
 
 添加控件复用 `Button`、`Menu` 和 `MenuItemButton`。两个安装入口调用同一个 `openInstall` 回调，使用 `InstallDialog` 与 `PluginManagerController`。root 作用域的 list slot `plugins.add.actions` 接受贡献的 `MenuItemButton` 行，放在安装项之后；每个贡献者接收 `onDismiss()` 回调，在开始动作前关闭菜单。
 
@@ -131,7 +131,7 @@ Host 入口通过生成的 Remote 接口暴露 `pluginRegistryProbe.fastest()`�
 
 这些页面覆盖侧栏、Remote 调用与 Host 侧管理器。
 
-- [ui-sidebar](../ui-sidebar/README.zh.md)——插件入口注册进的面板列表；[ui-layout](../ui-layout/README.zh.md)——页面占用的主 slot。
+- [ui-sidebar](../ui-sidebar/README.zh.md)——全局面板列表；[ui-layout](../ui-layout/README.zh.md)——页面占用的主 slot。
 - [api-remotes](../../api/remotes/README.zh.md)——`pluginManager.*` 与 `pluginInventory.*` 背后的 Remote BFF 面。
 - [plugin-manager](../../boot/plugin-manager/README.zh.md)——本页驱动的 Host 侧管理器。
 - [ui-settings-shell](../ui-settings-shell/README.zh.md)、[ui-settings-agent-loop](../ui-settings-agent-loop/README.zh.md)、[ui-settings-subagent](../ui-settings-subagent/README.zh.md)、[ui-settings-web-search](../ui-settings-web-search/README.zh.md)——注册进本页 `plugins.item` slot 的官方配置页。

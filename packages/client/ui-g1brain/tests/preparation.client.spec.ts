@@ -10,7 +10,7 @@ afterEach(async () => {
 
 const input = { target: { mode: 'new-ontology', folderPath: 'C:\\Users\\lisa\\Downloads\\周报本体',
   createOntologyCollectionName: '周报本体', createDomainName: '周报领域', createDocumentLibraryName: '周报文档库' } satisfies G1brainSessionTarget,
-prompt: '请盘点材料，并用中文提出构建方案。' }
+prompt: '请盘点材料，并用中文提出构建方案。', apiNamesNotice: '以下 Name 是接口标识，DisplayName 仅用于显示。' }
 
 function fixture() {
   const ctx = new Context()
@@ -19,7 +19,8 @@ function fixture() {
   const binding = { sessionId: 'session-g1brain-preparation' }
   const createWorkspace = vi.fn(async (_input: { path: string }) => { calls.push('workspace'); return { workspaceId: 'workspace-materials' } })
   const createSession = vi.fn(async (_input: { workspaceId: string }) => { calls.push('session'); return binding.sessionId })
-  const bind = vi.fn(async (_input: object) => { calls.push('binding'); return { ok: true, value: { bound: true } } })
+  const canonical = { ...input.target, createOntologyCollectionName: 'col_weekly_report', createOntologyCollectionDisplayName: '周报本体', createDomainName: 'dom_weekly_report', createDomainDisplayName: '周报领域' }
+  const bind = vi.fn(async (_input: object) => { calls.push('binding'); return { ok: true, value: { bound: true, target: canonical } } })
   const release = vi.fn(() => { calls.push('release') })
   const reference = { binding, ready: Promise.resolve(binding), release }
   const retain = vi.fn(() => { calls.push('retain'); return reference })
@@ -30,7 +31,7 @@ function fixture() {
   ctx.provide('remote', { g1brain: { bindSession: bind } } as never)
   ctx.provide('conversation', { input: { requestDraftInitialization: draft } } as never)
   ctx.provide('uiWorkspace', { openSession: open } as never)
-  return { ctx, calls, binding, createWorkspace, createSession, bind, retain, reference, release, draft, open }
+  return { ctx, calls, binding, canonical, createWorkspace, createSession, bind, retain, reference, release, draft, open }
 }
 
 describe('G1brain Session preparation', () => {
@@ -47,7 +48,7 @@ describe('G1brain Session preparation', () => {
     await preparing
     expect(f.createWorkspace).toHaveBeenCalledWith({ path: input.target.folderPath })
     expect(f.bind).toHaveBeenCalledWith({ sessionId: f.binding.sessionId, target: input.target })
-    expect(f.draft).toHaveBeenCalledWith(f.binding, { prompt: input.prompt })
+    expect(f.draft).toHaveBeenCalledWith(f.binding, { prompt: [input.prompt, input.apiNamesNotice, JSON.stringify(f.canonical, null, 2)].join('\n\n') })
     expect(f.calls).toEqual(['workspace', 'session', 'binding', 'retain', 'draft', 'open', 'release'])
   })
 

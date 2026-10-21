@@ -16,7 +16,7 @@ describe('G1brain prepared Session through the real Loader', () => {
       inspect: async (cwd) => {
         const proof: unknown = JSON.parse(await readFile(join(cwd, 'backend-proof.json'), 'utf8'))
         expect(proof).toEqual({ before: 16, after: 46,
-          requests: ['collection:周报本体', 'domain:周报领域', 'library:周报文档库', 'upload:中文 Word.docx.md', 'upload:中文 Excel.xlsx.md', 'delete:obsolete-property'],
+          requests: ['collection:col_7c120e3057d72928f5491e86', 'domain:dom_e4d35bcec9eb3d594c4bdeb7', 'domain-display:周报领域', 'library:周报文档库', 'upload:中文 Word.docx.md', 'upload:中文 Excel.xlsx.md', 'delete:obsolete-property'],
           output: '已读取中文材料并直接创建周报本体、领域和文档库；废弃属性经审批后删除。' })
         const files = await readdir(join(cwd, '.sessions'), { recursive: true })
         const file = files.find(file => /session\.v\d+\.jsonl$/.test(file))

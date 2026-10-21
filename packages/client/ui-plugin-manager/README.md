@@ -1,5 +1,5 @@
 ---
-description: "Manage the profile's plugin bundles, their rows, and the plugins' configuration from the Web sidebar."
+description: "Manage profile plugin bundles and configuration while keeping the G1brain sidebar entry hidden."
 kind: "package-reference"
 ---
 
@@ -11,7 +11,7 @@ Desktop product events use the optional [product analytics service](../product-a
 
 ## Summary
 
-Use the **Plugins** entry in the Web sidebar to manage the profile's installed bundles and the official bundles the installation ships switched off. Switch bundles and their rows on and off, install a bundle after the Host has read what the spec names, watch pnpm's output, stop a run, and enable what it added. Uninstalling asks for confirmation. A plugin that registers a configuration page is edited here, on its own page; Settings keeps the read-only inventory.
+The plugin management page can manage the profile's installed bundles and the official bundles the installation ships switched off. Switch bundles and their rows on and off, install a bundle after the Host has read what the spec names, watch pnpm's output, stop a run, and enable what it added. Uninstalling asks for confirmation. A plugin that registers a configuration page is edited here, on its own page; Settings keeps the read-only inventory.
 
 ## Table of Contents
 
@@ -27,7 +27,7 @@ Use the **Plugins** entry in the Web sidebar to manage the profile's installed b
 <a id="use-this-package"></a>
 ## Use this package
 
-Select **Plugins** in the sidebar. The information button uses an 11px caption-colored icon in a 20px square hover area, with a 4px gap after the subtitle. It explains that this page configures official plugins and installs or manages other plugins, while **Settings → Built-in plugins** shows the built-in inventory and runtime status. Hover or focus shows the shared tooltip; clicking keeps it open until another click, Escape, Tab, or an outside click. The page reads the inventory and the bundles through `api-remotes` when first opened; a Host without a managed profile shows the page as unavailable. **Official** comes first and lists the bundles the installation ships for switching on — off until switched on, without an uninstall, and tagged **Experimental** for experimental features — followed by the official plugins that registered a configuration page; **Installed** lists the bundles the profile holds. Cards are listed by name, so switching a bundle on or off does not move its card. A dependency without a bundle patch is not a plugin and is not listed unless the profile selects it, in which case it carries a problem tag. Global configuration remains in the Settings **Built-in plugins** section.
+The G1brain build temporarily hides the Plugins sidebar entry; the management page and programmatic navigation remain available. Hiding the entry does not disable installed plugins or their tools. The information button uses an 11px caption-colored icon in a 20px square hover area, with a 4px gap after the subtitle. It explains that this page configures official plugins and installs or manages other plugins, while **Settings → Built-in plugins** shows the built-in inventory and runtime status. Hover or focus shows the shared tooltip; clicking keeps it open until another click, Escape, Tab, or an outside click. The page reads the inventory and the bundles through `api-remotes` when first opened; a Host without a managed profile shows the page as unavailable. **Official** comes first and lists the bundles the installation ships for switching on — off until switched on, without an uninstall, and tagged **Experimental** for experimental features — followed by the official plugins that registered a configuration page; **Installed** lists the bundles the profile holds. Cards are listed by name, so switching a bundle on or off does not move its card. A dependency without a bundle patch is not a plugin and is not listed unless the profile selects it, in which case it carries a problem tag. Global configuration remains in the Settings **Built-in plugins** section.
 
 Installed bundles and their plugin rows display their own title and description in the current UI language on cards and detail pages. Each field falls back from exported locale `meta` to the accessible `package.json` of a package-root plugin; subpath plugins never read one; the final title is the full package or module name, with no package description when both sources omit it. See [Plugin display metadata](../../../docs/cookbook/adding-a-package.md#plugin-display-metadata) for the author format. Bundle cards, details, and component rows display the package root's manifest `icon` or exported `./icon`, or a subpath plugin's exported `<subpath>/icon`; absent or undecodable images retain the default artwork. Installation previews still use registry or manifest information.
 
@@ -106,7 +106,7 @@ Package management uses the profile's dependency records: installed bundles can 
 
 The Host entry exposes `pluginRegistryProbe.fastest()` through the generated Remote interface. It shares pending comparisons, expires cached results, and aborts and awaits outstanding probes on unload. Calls after unload return a rejected Promise.
 
-The browser plugin registers the `plugins` sidebar entry and its `main` panel through `ctx.slots.inject()`, so both follow late slot declaration, locale changes and teardown. The page is global and belongs to no Session. Display text comes from package metadata and the page's dictionary.
+The browser plugin registers the `plugins` main panel without a sidebar entry through `ctx.slots.inject()`, so the page follows late slot declaration, locale changes and teardown. The page is global and belongs to no Session. Display text comes from package metadata and the page's dictionary.
 
 The add control reuses `Button`, `Menu`, and `MenuItemButton`. Both installation actions call the same `openInstall` callback and use `InstallDialog` and `PluginManagerController`. The root-scoped list slot `plugins.add.actions` accepts contributed `MenuItemButton` rows after the install action; each contribution receives an `onDismiss()` callback to close the menu before starting its action.
 
@@ -131,7 +131,7 @@ The page's `main` registration declares `plugins.item`, `plugins.bundle.config`,
 
 These pages cover the sidebar, the Remote calls, and the Host-side manager.
 
-- [ui-sidebar](../ui-sidebar/README.md) — the panel list the Plugins entry registers into; [ui-layout](../ui-layout/README.md) — the main slot the page occupies.
+- [ui-sidebar](../ui-sidebar/README.md) — the global panel list; [ui-layout](../ui-layout/README.md) — the main slot the page occupies.
 - [api-remotes](../../api/remotes/README.md) — the Remote BFF surface behind `pluginManager.*` and `pluginInventory.*`.
 - [plugin-manager](../../boot/plugin-manager/README.md) — the Host-side manager this page drives.
 - [ui-settings-shell](../ui-settings-shell/README.md), [ui-settings-agent-loop](../ui-settings-agent-loop/README.md), [ui-settings-subagent](../ui-settings-subagent/README.md), [ui-settings-web-search](../ui-settings-web-search/README.md) — the official configuration pages that register into this page's `plugins.item` slot.

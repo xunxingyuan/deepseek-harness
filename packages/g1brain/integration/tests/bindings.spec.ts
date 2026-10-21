@@ -1,4 +1,4 @@
-import { chmodSync, mkdtempSync, mkdirSync, realpathSync, rmSync } from 'node:fs'
+import { chmodSync, mkdtempSync, mkdirSync, readFileSync, readdirSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
@@ -27,9 +27,13 @@ function fixture() {
 describe('G1brain Session bindings', () => {
   it('persists a canonical target and refuses a different target for the same Session', async () => {
     const { directory, session, store, target } = fixture()
-    const canonical = { ...target, folderPath: realpathSync.native(directory) }
-    expect(await store.bind(session, target)).toEqual(canonical)
+    const canonical = await store.bind(session, target)
+    expect(canonical).toMatchObject({ folderPath: realpathSync.native(directory), createOntologyCollectionDisplayName: '新本体', createDomainDisplayName: '设备' })
+    expect(canonical.createOntologyCollectionName).toMatch(/^col_[a-f0-9]{24}$/)
+    expect(canonical.createDomainName).toMatch(/^dom_[a-f0-9]{24}$/)
     expect(await store.load(session)).toEqual(canonical)
+    expect(await store.bind(session, target)).toEqual(canonical)
+    expect(await store.bind(session, canonical)).toEqual(canonical)
     await expect(store.bind(session, { ...target, createOntologyCollectionName: '另一集合' }))
       .rejects.toThrow('already bound')
   })
@@ -57,7 +61,7 @@ describe('G1brain Session bindings', () => {
     chmodSync(bindings, 0o777)
     vi.stubGlobal('process', { ...process, platform: 'win32' })
     await store.bind(session, target)
-    expect(await store.load(session)).toMatchObject({ createOntologyCollectionName: '新本体' })
+    expect(await store.load(session)).toMatchObject({ createOntologyCollectionDisplayName: '新本体' })
   })
 
   it.skipIf(process.platform === 'win32')('refuses a POSIX binding directory writable by other users', async () => {
@@ -72,6 +76,23 @@ describe('G1brain Session bindings', () => {
     const { session, store, target } = fixture()
     const alternate = { ...target, folderPath: target.folderPath[0]!.toLowerCase() + target.folderPath.slice(1) }
     await store.bind(session, alternate)
-    expect(await store.load({ ...session, header: { cwd: alternate.folderPath } })).toMatchObject({ createDomainName: '设备' })
+    expect(await store.load({ ...session, header: { cwd: alternate.folderPath } })).toMatchObject({ createDomainDisplayName: '设备' })
+  })
+
+  it('preserves legacy stored identifiers without rewriting or regenerating them on resume', async () => {
+    const { root, session, store, target } = fixture()
+    await store.bind(session, target)
+    const file = join(root, 'bindings', readdirSync(join(root, 'bindings'))[0]!)
+    const record = { version: 1, sessionId: session.id, target: { ...target, folderPath: realpathSync.native(target.folderPath) } }
+    writeFileSync(file, JSON.stringify(record))
+    const before = readFileSync(file, 'utf8')
+    expect(await store.load(session)).toEqual(record.target)
+    expect(readFileSync(file, 'utf8')).toBe(before)
+  })
+
+  it.each(['_schema', '_shared', 'schema', 'share'])('rejects binding an improvement Session to system domain %s', async (domainName) => {
+    const { session, store, target } = fixture()
+    await expect(store.bind(session, { mode: 'update-ontology', folderPath: target.folderPath,
+      ontologyCollectionName: 'existing_collection', domainName, documentLibraryName: 'existing_library' })).rejects.toThrow('system domains')
   })
 })

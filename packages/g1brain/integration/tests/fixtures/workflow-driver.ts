@@ -25,14 +25,23 @@ const server = createServer((request, response) => {
     let body = ''
     for await (const chunk of request) body += String(chunk)
     let name: string | undefined
+    let data: unknown
     if (request.method === 'POST' && url.pathname === '/kgApi/v1/gs/collections') {
       const input: unknown = JSON.parse(body)
-      if (typeof input !== 'object' || input === null || !('name' in input) || input.name !== '周报本体') throw new Error('Unexpected collection')
-      requests.push('collection:周报本体'); name = input.name
-    } else if (request.method === 'POST' && decodeURIComponent(url.pathname) === '/kgApi/v1/gs/collections/周报本体/domains') {
+      if (typeof input !== 'object' || input === null || !('name' in input) || input.name !== 'col_7c120e3057d72928f5491e86') throw new Error('Unexpected collection')
+      requests.push('collection:col_7c120e3057d72928f5491e86'); name = input.name
+      if (!('attributes' in input) || JSON.stringify(input.attributes) !== JSON.stringify({ displayName: '周报本体' })) throw new Error('Collection display name missing')
+      data = input
+    } else if (request.method === 'POST' && decodeURIComponent(url.pathname) === '/kgApi/v1/gs/collections/col_7c120e3057d72928f5491e86/domains') {
       const input: unknown = JSON.parse(body)
-      if (typeof input !== 'object' || input === null || !('name' in input) || input.name !== '周报领域' || !requests.includes('collection:周报本体')) throw new Error('Unexpected domain')
-      requests.push('domain:周报领域'); name = input.name
+      if (typeof input !== 'object' || input === null || !('name' in input) || input.name !== 'dom_e4d35bcec9eb3d594c4bdeb7' || !requests.includes('collection:col_7c120e3057d72928f5491e86')) throw new Error('Unexpected domain')
+      requests.push('domain:dom_e4d35bcec9eb3d594c4bdeb7'); name = input.name
+    } else if (url.pathname === '/kgApi/v1/gs/collections/col_7c120e3057d72928f5491e86/domains/dom_e4d35bcec9eb3d594c4bdeb7/config') {
+      if (request.method === 'PATCH') {
+        if (JSON.stringify(JSON.parse(body)) !== JSON.stringify({ displayName: '周报领域' })) throw new Error('Domain display name missing')
+        requests.push('domain-display:周报领域')
+      } else if (request.method !== 'GET') throw new Error('Unexpected config method')
+      data = { displayName: '周报领域' }
     } else if (request.method === 'POST' && url.pathname === '/mdApi/v1/md/collections') {
       if (url.searchParams.get('name') !== '周报文档库') throw new Error('Unexpected document library')
       requests.push('library:周报文档库'); name = '周报文档库'
@@ -45,12 +54,12 @@ const server = createServer((request, response) => {
       if (!['中文 Word.docx.md', '中文 Excel.xlsx.md'].includes(file.name) || !content.includes(expected)
         || content.includes('\ufffd') || content.startsWith('PK')) throw new Error('Office upload was not extracted into Chinese Markdown')
       requests.push(`upload:${file.name}`)
-    } else if (request.method === 'DELETE' && decodeURIComponent(url.pathname) === '/kgApi/v1/gs/collections/周报本体/domains/周报领域/props/obsolete-property') {
-      if (url.searchParams.get('cascade') !== 'false' || !requests.includes('domain:周报领域')) throw new Error('Unexpected deletion')
+    } else if (request.method === 'DELETE' && decodeURIComponent(url.pathname) === '/kgApi/v1/gs/collections/col_7c120e3057d72928f5491e86/domains/dom_e4d35bcec9eb3d594c4bdeb7/props/obsolete-property') {
+      if (url.searchParams.get('cascade') !== 'false' || !requests.includes('domain:dom_e4d35bcec9eb3d594c4bdeb7')) throw new Error('Unexpected deletion')
       requests.push('delete:obsolete-property')
     } else throw new Error(`Unexpected request ${request.method} ${url.pathname}`)
     response.writeHead(200, { 'Content-Type': 'application/json' })
-    response.end(JSON.stringify({ code: 200, data: { name } }))
+    response.end(JSON.stringify({ code: 200, data: data ?? { name } }))
   })().catch((error: unknown) => {
     failures.push(error instanceof Error ? error.message : String(error))
     response.writeHead(500, { 'Content-Type': 'application/json' })
@@ -94,9 +103,10 @@ try {
   const before = ctx.tools.schemas(agent).filter(tool => tool.name.startsWith('g1brain_')).length
   const service = ctx.get('g1brain') as G1brainIntegration
   await service.bindSession({ sessionId: id, target: { mode: 'new-ontology', folderPath: materials,
-    createOntologyCollectionName: '周报本体', createDomainName: '周报领域', createDocumentLibraryName: '周报文档库' } })
+    createOntologyCollectionName: '周报本体', createOntologyCollectionDisplayName: '周报本体',
+    createDomainName: '周报领域', createDomainDisplayName: '周报领域', createDocumentLibraryName: '周报文档库' } })
   const after = ctx.tools.schemas(agent).filter(tool => tool.name.startsWith('g1brain_')).length
-  const result = await runFixtureTurn(ctx, { task: '请读取第一张表并创建周报本体、领域和文档库，随后申请删除废弃属性，用中文回复。' })
+  const result = await runFixtureTurn(ctx, { task: '请读取第一张表并创建col_7c120e3057d72928f5491e86、领域和文档库，随后申请删除废弃属性，用中文回复。' })
   if (failures.length) throw new Error(failures.join('; '))
   await writeFile(join(process.cwd(), 'backend-proof.json'), JSON.stringify({ requests, before, after, output: result.output }))
   process.stdout.write(JSON.stringify({ type: 'g1brain-workflow-result', before, after, output: result.output }) + '\n')

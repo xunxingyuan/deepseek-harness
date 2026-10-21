@@ -12,6 +12,7 @@ import type {
 } from '../types.ts'
 import { G1BrainError } from '../errors.ts'
 import { encryptG1Password } from './crypto.ts'
+import { requireResourceName } from '../../names.ts'
 
 type FetchLike = typeof fetch
 
@@ -308,27 +309,47 @@ class G1BrainClientImpl {
     return listValue<OntologyCollection>(await this.request('/kgApi/v1/gs/collections'))
   }
 
-  async createOntologyCollection(name: string, description = ''): Promise<unknown> {
-    return this.request('/kgApi/v1/gs/collections', {
+  async createOntologyCollection(name: string, description = '', displayName?: string): Promise<unknown> {
+    requireResourceName(name)
+    const result = await this.request('/kgApi/v1/gs/collections', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name, description }),
+      body: JSON.stringify({ name, description, ...(displayName === undefined ? {} : { attributes: { displayName } }) }),
     })
+    const created = unwrap(result)
+    if (isRecord(created) && typeof created.name === 'string' && created.name !== name) {
+      throw new Error('G1brain returned a different collection API name; do not write child records using the requested name')
+    }
+    if (displayName !== undefined) {
+      const attributes = isRecord(created) && isRecord(created.attributes) ? created.attributes
+        : unwrap(await this.request(`/kgApi/v1/gs/collections/${encodeURIComponent(name)}/attributes`))
+      if (!isRecord(attributes) || attributes.displayName !== displayName) throw new Error('G1brain collection was created but its display name could not be verified')
+    }
+    return result
   }
 
   async listOntologyDomains(collectionName: string): Promise<OntologyDomain[]> {
     const items = listValue<OntologyDomain | string>(
-      await this.request(`/kgApi/v1/gs/collections/${encodeURIComponent(collectionName)}/domains?view=brief`),
+      await this.request(`/kgApi/v1/gs/collections/${encodeURIComponent(collectionName)}/domains?view=detail`),
     )
     return items.map(item => typeof item === 'string' ? { name: item } : item)
   }
 
-  async createOntologyDomain(collectionName: string, name: string): Promise<unknown> {
-    return this.request(`/kgApi/v1/gs/collections/${encodeURIComponent(collectionName)}/domains`, {
+  async createOntologyDomain(collectionName: string, name: string, displayName?: string): Promise<unknown> {
+    requireResourceName(name)
+    const path = `/kgApi/v1/gs/collections/${encodeURIComponent(collectionName)}/domains`
+    const result = await this.request(path, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ name }),
     })
+    if (displayName !== undefined) {
+      const configPath = `${path}/${encodeURIComponent(name)}/config`
+      await this.request(configPath, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ displayName }) })
+      const saved = unwrap(await this.request(configPath))
+      if (!isRecord(saved) || saved.displayName !== displayName) throw new Error('G1brain domain was created but its display name could not be verified')
+    }
+    return result
   }
 
   async validateOntologyPackage(packageJson: unknown): Promise<unknown> {

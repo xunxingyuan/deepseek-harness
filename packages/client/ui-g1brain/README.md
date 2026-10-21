@@ -27,6 +27,8 @@ The panel reads existing resource names through the Host's G1brain service. With
 
 The panel waits for the Session reference to be ready before preparing the draft and navigating. Failures preserve the form and distinguish directory access, Session creation, target binding, and draft initialization; retry after resolving the indicated step.
 
+New ontology and domain inputs are display names; the Host resolves their API identifiers once and adds the saved mapping to the draft. Improvement excludes system schema/shared domains and automatically selects a sole business domain. Multiple business domains require an explicit selection. The Open action names missing fields, loading failures, or a collection with no business domain; it becomes available after valid ontology, domain, library, and folder selections. Switching collections invalidates the previous domain immediately and ignores late replies for another collection.
+
 <a id="understand-the-package"></a>
 ## Understand the package
 

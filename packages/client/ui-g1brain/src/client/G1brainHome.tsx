@@ -99,8 +99,7 @@ export function G1brainHome({ t, loadCatalog, loadDomains, pickDirectory, openSe
   const [ontologyExisting, setOntologyExisting] = useState('')
   const [newDomain, setNewDomain] = useState('')
   const [existingDomain, setExistingDomain] = useState('')
-  const [domains, setDomains] = useState<readonly G1brainCatalogItem[]>([])
-  const [domainError, setDomainError] = useState(false)
+  const [domainCatalog, setDomainCatalog] = useState<{ collection: string; items: readonly G1brainCatalogItem[]; state: 'loading' | 'ready' | 'error' }>({ collection: '', items: [], state: 'ready' })
   const [libraryMode, setLibraryMode] = useState<'new' | 'existing'>('new')
   const [libraryName, setLibraryName] = useState('')
   const [libraryExisting, setLibraryExisting] = useState('')
@@ -115,6 +114,11 @@ export function G1brainHome({ t, loadCatalog, loadDomains, pickDirectory, openSe
     return () => { active = false }
   }, [loadCatalog, retry])
 
+  const existingAvailable = catalog?.configured === true && catalog.error !== true && !catalogError
+  const domains = domainCatalog.collection === ontologyExisting && domainCatalog.state === 'ready'
+    ? domainCatalog.items : []
+  const domainError = domainCatalog.collection === ontologyExisting && domainCatalog.state === 'error'
+  const domainLoading = !!ontologyExisting && (domainCatalog.collection !== ontologyExisting || domainCatalog.state === 'loading')
   const target = mode === 'new' ? ontologyName.trim() : ontologyExisting
   const domain = mode === 'new' ? newDomain.trim() : existingDomain
   const library = libraryMode === 'new' ? libraryName.trim() : libraryExisting
@@ -122,28 +126,40 @@ export function G1brainHome({ t, loadCatalog, loadDomains, pickDirectory, openSe
     : catalog?.ontologies.find(item => item.name === target)?.displayName?.trim() || target
   const domainLabel = mode === 'new' ? domain
     : domains.find(item => item.name === domain)?.displayName?.trim() || domain
-  const ready = target.length > 0 && domain.length > 0 && library.length > 0 && directory.trim().length > 0 && !busy
-  const existingAvailable = catalog?.configured === true && catalog.error !== true
+  const missing = [
+    ...(!target || (mode === 'optimize' && (!existingAvailable || !catalog.ontologies.some(item => item.name === target))) ? [t(mode === 'new' ? 'needOntologyName' : 'needOntology')] : []),
+    ...(mode === 'new' ? !domain ? [t('needDomainName')] : []
+      : domainLoading ? [t('domainsLoading')] : domainError ? [t('domainError')]
+        : !domains.some(item => item.name === domain) ? [t(domains.length === 0 && ontologyExisting ? 'noBusinessDomains' : 'needDomain')] : []),
+    ...(!library || (libraryMode === 'existing' && (!existingAvailable || !catalog.libraries.some(item => item.name === library))) ? [t(libraryMode === 'new' ? 'needLibraryName' : 'needLibrary')] : []),
+    ...(!directory.trim() ? [t('needDirectory')] : []),
+  ]
+  const ready = missing.length === 0 && !busy
   const failed = catalogError || catalog?.error === true
   const ontologies = catalog?.ontologies ?? []
   const libraries = catalog?.libraries ?? []
 
   const prepare = (nextMode: 'new' | 'optimize', collectionName?: string) => {
     setMode(nextMode)
-    if (collectionName !== undefined) { setOntologyExisting(collectionName); setExistingDomain('') }
+    if (collectionName !== undefined && collectionName !== ontologyExisting) { setOntologyExisting(collectionName); setExistingDomain('') }
     setView('prepare')
   }
 
   useEffect(() => {
-    if (mode !== 'optimize' || !ontologyExisting || !existingAvailable) { setDomains([]); return }
+    if (mode !== 'optimize' || !ontologyExisting || !existingAvailable) return
     let active = true
-    setDomainError(false)
+    setDomainCatalog({ collection: ontologyExisting, items: [], state: 'loading' })
     void loadDomains(ontologyExisting).then(
-      (value) => { if (active) setDomains(value) },
-      () => { if (active) { setDomains([]); setDomainError(true) } },
+      (value) => {
+        if (!active) return
+        const items = value.filter(item => !/^(?:_?schema|_?shared?)$/iu.test(item.name.trim()))
+        setDomainCatalog({ collection: ontologyExisting, items, state: 'ready' })
+        setExistingDomain(current => items.some(item => item.name === current) ? current : items.length === 1 ? items[0]?.name ?? '' : '')
+      },
+      () => { if (active) setDomainCatalog({ collection: ontologyExisting, items: [], state: 'error' }) },
     )
     return () => { active = false }
-  }, [mode, ontologyExisting, existingAvailable, loadDomains])
+  }, [mode, ontologyExisting, existingAvailable, loadDomains, retry])
 
   const proceed = async () => {
     if (!ready) return
@@ -162,7 +178,8 @@ export function G1brainHome({ t, loadCatalog, loadDomains, pickDirectory, openSe
         mode: mode === 'new' ? 'new-ontology' : 'update-ontology',
         folderPath: directory.trim(),
         ...(mode === 'new'
-          ? { createOntologyCollectionName: target, createDomainName: domain }
+          ? { createOntologyCollectionName: target, createOntologyCollectionDisplayName: target,
+            createDomainName: domain, createDomainDisplayName: domain }
           : { ontologyCollectionName: target, domainName: domain }),
         ...(libraryMode === 'new' ? { createDocumentLibraryName: library } : { documentLibraryName: library }),
       }
@@ -219,11 +236,11 @@ export function G1brainHome({ t, loadCatalog, loadDomains, pickDirectory, openSe
               <button className={mode === 'optimize' ? css.choiceSelected : css.choice} type="button" aria-pressed={mode === 'optimize'} onClick={() => { setMode('optimize') }}><strong>{t('modeOptimize')}</strong><span>{t('modeOptimizeHelp')}</span></button>
             </div>
             <div className={css.targetFields}>
-              {mode === 'new' ? <label className={css.field}>{t('ontologyName')}<Input value={ontologyName} onChange={(event) => { setOntologyName(event.target.value) }} placeholder={t('ontologyNamePlaceholder')} /></label>
+              {mode === 'new' ? <div><label className={css.field}>{t('ontologyName')}<Input value={ontologyName} onChange={(event) => { setOntologyName(event.target.value) }} placeholder={t('ontologyNamePlaceholder')} /></label><small className={css.hint}>{t('displayNameHelp')}</small></div>
                 : <div><label className={css.field}>{t('ontologyExisting')}<select disabled={!existingAvailable} value={ontologyExisting} onChange={(event) => { setOntologyExisting(event.target.value); setExistingDomain('') }}><option value="">{t('ontologyExistingPlaceholder')}</option>{catalog?.ontologies.map(item => <option key={item.name} value={item.name}>{catalogLabel(item)}</option>)}</select></label>{!existingAvailable && <small className={css.hint}>{t('unavailable')}</small>}</div>}
               {mode === 'new'
                 ? <label className={css.field}>{t('domainNew')}<Input value={newDomain} onChange={(event) => { setNewDomain(event.target.value) }} placeholder={t('domainNewPlaceholder')} /></label>
-                : <div><label className={css.field}>{t('domainExisting')}<select disabled={!existingAvailable || domains.length === 0} value={existingDomain} onChange={(event) => { setExistingDomain(event.target.value) }}><option value="">{t('domainExistingPlaceholder')}</option>{domains.map(item => <option key={item.name} value={item.name}>{catalogLabel(item)}</option>)}</select></label>{domainError && <small className={css.hint}>{t('domainError')}</small>}</div>}
+                : <div><label className={css.field}>{t('domainExisting')}<select disabled={!existingAvailable || domains.length === 0 || domainLoading} value={existingDomain} onChange={(event) => { setExistingDomain(event.target.value) }}><option value="">{t('domainExistingPlaceholder')}</option>{domains.map(item => <option key={item.name} value={item.name}>{catalogLabel(item)}</option>)}</select></label><small className={css.hint}>{t('businessDomainHelp')}</small>{domainError && <small className={css.hint}>{t('domainError')}</small>}</div>}
             </div>
           </section>
 
@@ -248,7 +265,7 @@ export function G1brainHome({ t, loadCatalog, loadDomains, pickDirectory, openSe
 
         <aside className={css.footer}>
           <div><strong>{t('summary')}</strong><p>{target ? mode === 'new' ? t('summaryNew', { name: targetLabel }) : t('summaryOptimize', { name: targetLabel }) : t('summaryPending')} · {domain ? t('summaryDomain', { name: domainLabel }) : t('summaryPending')} · {library ? libraryMode === 'new' ? t('summaryLibraryNew', { name: library }) : t('summaryLibraryExisting', { name: library }) : t('summaryPending')} · {directory ? t('summaryDirectory', { name: directory }) : t('summaryPending')}</p><small>{t('draftNotice')}</small></div>
-          <Button variant="primary" disabled={!ready} onClick={() => { void proceed() }}>{busy ? t('proceeding') : t('proceed')}</Button>
+          <div className={css.footerActions}><p className={css.validation} id="g1brain-missing" role="status">{missing.join('；')}</p><Button variant="primary" disabled={!ready} aria-describedby="g1brain-missing" onClick={() => { void proceed() }}>{busy ? t('proceeding') : t('proceed')}</Button></div>
         </aside>
         {startError !== null && <p className={css.error} role="alert">{t(startError === 'directory' ? 'startDirectoryError'
           : startError === 'binding' ? 'startBindingError' : startError === 'draft' ? 'startDraftError' : 'startError')}</p>}

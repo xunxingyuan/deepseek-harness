@@ -1,4 +1,5 @@
 import type { PreparedTask } from '../types.ts'
+import { isSystemDomain } from '../../names.ts'
 
 /** G1brain operations that require write access to the bound resources. */
 export const MUTATING_TOOLS = new Set([
@@ -61,6 +62,11 @@ function oneOf(name: string, actual: unknown, allowed: Array<string | undefined>
  * @param args - validated model arguments.
  */
 export function assertTaskScope(task: PreparedTask | undefined, tool: string, args: Record<string, unknown>): void {
+  if (MUTATING_TOOLS.has(tool) && ((typeof args.domainName === 'string' && isSystemDomain(args.domainName))
+    || (tool === 'g1brain_create_ontology_domain' && typeof args.name === 'string' && isSystemDomain(args.name))
+    || (Array.isArray(args.domains) && args.domains.some(domain => typeof domain === 'string' && isSystemDomain(domain))))) {
+    throw new Error('系统领域不能作为本体新增或优化的写入目标')
+  }
   if (!task) return // Standalone stdio MCP is configured directly by its operator.
   if (tool === 'g1brain_update_agent' || tool === 'g1brain_publish_agent') {
     throw new Error('当前本体任务未绑定智能体 ID，不能修改或发布任意智能体')

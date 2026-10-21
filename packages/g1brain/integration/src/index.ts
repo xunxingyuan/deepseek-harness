@@ -10,6 +10,7 @@ import { resolveDshHome } from '@deepseek-ai/dsh-home-paths'
 import { Remote, TypertRemoteService } from '@deepseek-ai/dsh-typert-protocol'
 import z from '@deepseek-ai/schemastery'
 import { createBindingStore } from './bindings.ts'
+import { isSystemDomain } from './names.ts'
 import { assertTaskScope, DELETION_TOOLS, MUTATING_TOOLS, requiresDeletionApproval, scopedSchema } from './legacy/bridge/policy.ts'
 import { openWorkspaceScope } from './legacy/bridge/scope.ts'
 import { createG1BrainTools } from './legacy/bridge/tools.ts'
@@ -49,6 +50,7 @@ const WORKFLOW_GUIDANCE = [
   'Reply in the language of the current user request, including progress updates, clarification questions, and the final result. Use Simplified Chinese for Chinese requests unless the user explicitly asks for another language.',
   'Use the available G1brain tools for ontology and document operations. Ordinary Sessions provide discovery and search; creation and updates require a G1brain build or improvement Session prepared with the selected ontology, domain, document library, and source folder.',
   'If write tools are absent, explain that this Session is read-only and direct the user to prepare a G1brain build or improvement Session. Do not interpret missing write tools as missing API credentials or ask the user to install another plugin.',
+  'Before writing in a prepared Session, call g1brain_context and use its bound collection and domain API names for creation and all later references. Display names are labels only; never translate or regenerate bound identifiers. System domains such as _schema and _shared are not business write targets.',
   'Use g1brain_read_selected_file to extract DOCX or Excel text and tables, not a raw text read of Office bytes. Upload tools extract UTF-8 Markdown before ingestion. Unsupported or encrypted files must be converted first; never upload garbled text as a successful extraction. Document uploads and processing tasks use the document library API name from the Session context, not the ontology collection name or a display name.',
   'In a prepared Session, inspect the sources and cite evidence. Execute requested creation, updates, uploads, and document processing within the bound resources without asking for extra confirmation. A request only for information or a plan is not a request to write data. Ask clarification questions only when the intended scope or business requirement is ambiguous.',
   'Deletion and replacement imports that may remove existing content require approval for each call. Set confirm=true for those calls and let Harness request approval; do not ask for a separate chat confirmation. Missing or rejected approval must prevent the deletion.',
@@ -231,10 +233,10 @@ export default class G1brainIntegration extends TypertRemoteService {
   async bindSession(request: G1brainBindRequest): Promise<G1brainBindReceipt> {
     const session = this.ctx.sessions.get(request.sessionId)
     if (session === undefined) throw new Error('G1brain Session does not exist')
-    await this.bindings.bind(session, request.target)
+    const target = await this.bindings.bind(session, request.target)
     const agent = this.ctx.agents.get(request.sessionId)
     if (agent !== undefined) await this.attachAgent(agent)
-    return { sessionId: request.sessionId, bound: true }
+    return { sessionId: request.sessionId, bound: true, target }
   }
 
   private async attachAgent(agent: Agent): Promise<void> {
@@ -363,6 +365,7 @@ export default class G1brainIntegration extends TypertRemoteService {
     if (!collectionName.trim()) throw new Error('G1brain collectionName must not be blank')
     const collection = encodeURIComponent(collectionName.trim())
     return itemsOf(await this.read(`/kgApi/v1/gs/collections/${collection}/domains?view=detail`, signal))
+      .filter(item => !isSystemDomain(item.name))
   }
 
   /** Read document library names; fail explicitly without API credentials.

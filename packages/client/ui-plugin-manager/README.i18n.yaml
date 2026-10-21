@@ -3,20 +3,20 @@
 # After editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write packages/client/ui-plugin-manager/README.md
 /:
-  en: 65c981be6a40344b
-  zh: 468873de4e2db85f
+  en: c86ef704a5dba0e5
+  zh: 3757890391a2bede
 /deepseek-ai-dsh-client-ui-plugin-manager:
   en: 719d90bd71d7b957
   zh: 492767e7ea9f88f8
 /deepseek-ai-dsh-client-ui-plugin-manager/summary:
-  en: 0dc67850ca5358de
-  zh: 4ff1bb5bdc184e3e
+  en: 278267dc29b6bc1b
+  zh: c2508ba21ab7c0f0
 /deepseek-ai-dsh-client-ui-plugin-manager/table-of-contents:
   en: d152484eb41ac6b4
   zh: 09388d293f9be9cb
 /deepseek-ai-dsh-client-ui-plugin-manager/use-this-package:
-  en: c41c530198c0d610
-  zh: 584a6d658ff9f022
+  en: 72718424872d050b
+  zh: ccf88f043723b62d
 /deepseek-ai-dsh-client-ui-plugin-manager/use-this-package/installing-a-bundle:
   en: 70b3d1dfc27406ca
   zh: 9a65898773856d71
@@ -36,8 +36,8 @@
   en: 203168fc87e939bd
   zh: 72d0ccd2c54f3f44
 /deepseek-ai-dsh-client-ui-plugin-manager/understand-the-implementation/registration:
-  en: 3d70281f082988a5
-  zh: 17c6f595e3b57260
+  en: 051602853505db42
+  zh: f496fa62fda3e7de
 /deepseek-ai-dsh-client-ui-plugin-manager/understand-the-implementation/the-store:
   en: 21a0bbe8eb92229c
   zh: 096ff63db61992bb
@@ -45,8 +45,8 @@
   en: f2bfff32346015bf
   zh: b9aedc96182004ae
 /deepseek-ai-dsh-client-ui-plugin-manager/further-exploration:
-  en: f9a42dfed0360d6a
-  zh: 455a70bcb6c69624
+  en: 2099cda22d711779
+  zh: db2a4bbdc25b68c0
 /deepseek-ai-dsh-client-ui-plugin-manager/model-experience:
   en: 8dcc6c6fbfb567d2
   zh: 43690ae350f1d6a7

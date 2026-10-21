@@ -29,6 +29,8 @@ kind: "package-reference"
 
 文档处理沿用当前 G1brain 网页的 MD 接口：上传后先提交 `MD` 切片任务并确认成功，再提交 `CHUNK` 的关键词、向量化和索引操作。提交工具可选择绑定文档库内的全部现有文件，也可指定经过该库校验的文档 ID。7 个任务工具覆盖提交、当前/历史列表、详情、逐文件状态、限时等待与取消。列表和详情只返回摘要，避免大型任务占满模型上下文。
 
+新绑定会将用户输入的本体集合和领域名称保留为显示名，将不安全的名称转换为稳定且按会话区分的 ASCII 标识。已经有效的小写标识保持不变。集合显示名保存到 `attributes.displayName`；领域显示名通过配置 `PATCH` 保存并回读验证。绑定回执返回持久化后的标识，用于会话说明；创建工具同时返回标识与显示名。已有资源引用和旧绑定不会在读取时改名。旧绑定中的不安全创建标识会在发送请求前报错，此时应重新准备会话。系统 schema/shared 领域不能绑定为优化目标，也不能作为限定范围写入工具的操作目标。领域创建后的显示名保存失败，可能留下未设置预期显示名的新领域；工具会报告失败，不会宣称全部成功。
+
 文件读取会提取 DOCX 段落与表格，以及按工作表分组的 XLSX/XLS 单元格。文本输入支持严格 UTF-8 或带 BOM 的 UTF-16；其他编码会报错，不会插入替换字符。上传复用相同解析，将 UTF-8 Markdown 而非 Office 原始二进制发送到 MD API。非 Markdown 文件保留原后缀并追加 `.md`，因此 `report.docx` 与 `report.xlsx` 不会混淆。首次请求前须确保所有文件解析成功且上传名称不重复。原文件保持不变。配置的文件大小上限同时约束 Office 解压总量和整批正文的 UTF-8 总量；读取还会独立校验请求的输出上限，不截断正文。开始上传后若 HTTP 请求失败，仍可能留下部分已上传文件。文档任务的 `collectionName` 是绑定文档库的 API 名称，不能使用本体集合、领域或显示名称。
 
 绑定存储在 POSIX 上检查私有目录权限；Windows 依赖当前用户配置目录的 ACL，不以合成的 POSIX 权限位判断。目录匹配采用对应平台的路径比较规则，包括 Windows 盘符大小写。恢复智能体时若无法读取绑定或材料目录，会使初始化失败，而非悄悄退回只读工具。
@@ -67,6 +69,8 @@ Reply in the language of the current user request, including progress updates, c
 Use the available G1brain tools for ontology and document operations. Ordinary Sessions provide discovery and search; creation and updates require a G1brain build or improvement Session prepared with the selected ontology, domain, document library, and source folder.
 
 If write tools are absent, explain that this Session is read-only and direct the user to prepare a G1brain build or improvement Session. Do not interpret missing write tools as missing API credentials or ask the user to install another plugin.
+
+Before writing in a prepared Session, call g1brain_context and use its bound collection and domain API names for creation and all later references. Display names are labels only; never translate or regenerate bound identifiers. System domains such as _schema and _shared are not business write targets.
 
 Use g1brain_read_selected_file to extract DOCX or Excel text and tables, not a raw text read of Office bytes. Upload tools extract UTF-8 Markdown before ingestion. Unsupported or encrypted files must be converted first; never upload garbled text as a successful extraction. Document uploads and processing tasks use the document library API name from the Session context, not the ontology collection name or a display name.
 

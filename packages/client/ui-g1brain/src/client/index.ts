@@ -62,7 +62,7 @@ export function apply(ctx: Context): void {
         loadCatalog,
         loadDomains,
         pickDirectory: () => desktopPicker?.pick() ?? ctx.uiWorkspace.pickDirectory(),
-        openSession: input => prepareG1brainSession(ctx, input),
+        openSession: input => prepareG1brainSession(ctx, { ...input, apiNamesNotice: t('promptApiNames') }),
       }),
     }, G1brainHome)
     queueMicrotask(() => {

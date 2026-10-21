@@ -38,19 +38,25 @@ async function preparationStep<T>(stage: G1brainPreparationStage, operation: () 
  * @param input - selected materials, targets, and user-editable operation brief.
  * @returns after the bound Session is ready and opened; failures carry their preparation stage.
  */
-export async function prepareG1brainSession(ctx: Context, input: { target: G1brainSessionTarget; prompt: string }): Promise<void> {
+export async function prepareG1brainSession(ctx: Context, input: {
+  target: G1brainSessionTarget
+  prompt: string
+  apiNamesNotice: string
+}): Promise<void> {
   const { target, prompt } = input
   const workspace = await preparationStep('directory', () => ctx.workspaces.create({ path: target.folderPath }))
   const sessionId = await preparationStep('session', () => ctx.sessions.create({ workspaceId: workspace.workspaceId }))
-  await preparationStep('binding', async () => {
+  const bound = await preparationStep('binding', async () => {
     const result = await ctx.remote.g1brain.bindSession({ sessionId, target })
     if (!result.ok) throw new Error(result.error.message)
+    return result.value.target
   })
   await preparationStep('draft', async () => {
     const reference = ctx.sessions.retain(sessionId, { source: 'g1brainPreparation' })
     try {
       await reference.ready
-      if (ctx.conversation.input.requestDraftInitialization(reference.binding, { prompt }) !== 'applied') {
+      const brief = [prompt, input.apiNamesNotice, JSON.stringify(bound, null, 2)].join('\n\n')
+      if (ctx.conversation.input.requestDraftInitialization(reference.binding, { prompt: brief }) !== 'applied') {
         throw new Error('G1brain Session draft could not be prepared')
       }
       ctx.uiWorkspace.openSession(sessionId)

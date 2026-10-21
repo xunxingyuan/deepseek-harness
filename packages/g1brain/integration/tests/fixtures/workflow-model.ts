@@ -8,11 +8,11 @@ const calls = [
   { name: 'g1brain_read_selected_file', args: { path: '第一张表.md' } },
   { name: 'g1brain_read_selected_file', args: { path: '中文 Word.docx' } },
   { name: 'g1brain_read_selected_file', args: { path: '中文 Excel.xlsx' } },
-  { name: 'g1brain_create_ontology_collection', args: { name: '周报本体' } },
-  { name: 'g1brain_create_ontology_domain', args: { collectionName: '周报本体', name: '周报领域' } },
+  { name: 'g1brain_create_ontology_collection', args: { name: 'col_7c120e3057d72928f5491e86' } },
+  { name: 'g1brain_create_ontology_domain', args: { collectionName: 'col_7c120e3057d72928f5491e86', name: 'dom_e4d35bcec9eb3d594c4bdeb7' } },
   { name: 'g1brain_create_document_library', args: { name: '周报文档库' } },
   { name: 'g1brain_upload_selected_files', args: { collectionName: '周报文档库', files: ['中文 Word.docx', '中文 Excel.xlsx'] } },
-  { name: 'g1brain_delete_ontology_property', args: { collectionName: '周报本体', domainName: '周报领域', nodeId: 'obsolete-property', confirm: true } },
+  { name: 'g1brain_delete_ontology_property', args: { collectionName: 'col_7c120e3057d72928f5491e86', domainName: 'dom_e4d35bcec9eb3d594c4bdeb7', nodeId: 'obsolete-property', confirm: true } },
 ] as const
 
 class WorkflowAdapter extends LlmAdapter {

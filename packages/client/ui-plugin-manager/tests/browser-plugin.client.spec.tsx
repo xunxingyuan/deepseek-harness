@@ -7,7 +7,6 @@ import { LocaleRuntime } from '@deepseek-ai/dsh-client-locale/client'
 import { createSnapshotStore } from '@deepseek-ai/dsh-client-store'
 import type { ILayout, PanelInfo } from '@deepseek-ai/dsh-client-ui-layout/client'
 import { SlotRegistry } from '@deepseek-ai/dsh-client-ui-renderer/client'
-import { resolveSlotLabel } from '@deepseek-ai/dsh-client-ui-slots'
 import { TestRemote, usePinnedBrowserLanguages } from '@deepseek-ai/dsh-client-test-runtime'
 import * as settings from '@deepseek-ai/dsh-client-ui-settings/client'
 import { apply, inject, NS, PANEL_ID } from '../src/client/index.ts'
@@ -121,7 +120,7 @@ describe('ui-plugin-manager browser plugin', () => {
     expect(inject).toEqual(['slots', 'locale', 'remote', 'remote.pluginManager', 'remote.pluginInventory', 'remote.pluginRegistryProbe', 'configForms', 'layout'])
   })
 
-  it('registers the sidebar entry and its page, which reads the Host only once rendered and follows Host changes', async () => {
+  it('keeps the management page and programmatic navigation without a sidebar entry', async () => {
     const b = await bench()
     declare(b.slots)
     const fiber = b.ctx.plugin({ inject: [...inject], apply })
@@ -135,17 +134,12 @@ describe('ui-plugin-manager browser plugin', () => {
     expect(entry.component).toBe(PluginManagerPage)
     expect(entry.options).toMatchObject({ key: PANEL_ID })
     expect(entry.locale).toBe(NS)
-    // The sidebar entry addresses the page by the same id and speaks the dictionary.
-    const icon = b.slots.entries('sidebar.panellist')[0]!
-    expect(icon.component).toBe(PluginsPanelIcon)
+    expect(b.slots.entries('sidebar.panellist')).toEqual([])
     const unread = () => { throw new Error('The sidebar icon must not read application state') }
     const glyph = render(<PluginsPanelIcon size={18} active={false}
       usePanelInfo={unread} useSessions={unread} useSessionStatus={unread} useSessionRetainInfo={unread}
       useWorkspaces={unread} useResource={unread} />)
     expect(glyph.container.querySelector('svg')?.getAttribute('width')).toBe('18')
-    expect(icon.options).toMatchObject({ id: PANEL_ID, order: 0 })
-    expect(icon.locale).toBe(NS)
-    expect(resolveSlotLabel(icon.options.label)).toBe('插件')
     // The page declares the slots a plugin's configuration arrives through, and binds their projection beside its state.
     expect(b.slots.spec('plugins.add.actions')).toMatchObject({ kind: 'list', scope: 'root' })
     expect(b.slots.spec('plugins.item')).toMatchObject({ kind: 'list', scope: 'root' })

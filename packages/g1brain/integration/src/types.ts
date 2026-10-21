@@ -26,6 +26,8 @@ export interface G1brainSessionTarget {
   readonly ontologyCollectionName?: string
   /** Collection name to create in new mode. */
   readonly createOntologyCollectionName?: string
+  /** User-facing name saved separately from the new collection's API identifier. */
+  readonly createOntologyCollectionDisplayName?: string
   /** Existing document library. */
   readonly documentLibraryName?: string
   /** Document library name to create. */
@@ -34,6 +36,8 @@ export interface G1brainSessionTarget {
   readonly domainName?: string
   /** Domain name to create, when selected. */
   readonly createDomainName?: string
+  /** User-facing name saved in the new domain's configuration. */
+  readonly createDomainDisplayName?: string
 }
 
 /** Browser request binding a newly created Harness Session to G1brain targets. */
@@ -46,4 +50,6 @@ export interface G1brainBindRequest {
 export interface G1brainBindReceipt {
   readonly sessionId: SessionId
   readonly bound: true
+  /** Canonical identifiers and display names persisted by the Host. */
+  readonly target: G1brainSessionTarget
 }

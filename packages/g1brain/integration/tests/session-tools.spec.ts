@@ -57,7 +57,9 @@ async function harness(allowWrites = true) {
   await ctx.plugin(Object.assign((inner: Context) => { scope = createScope(inner, agent) },
     { inject: ['tools', 'sessions', 'agents', 'approval'] }))
   agent.ctx = scope.ctx
-  const fetcher = vi.fn(async (_url: string, _init: RequestInit) => Response.json({ data: { name: '测试资料库' } }))
+  const fetcher = vi.fn(async (url: string, init: RequestInit) => Response.json({ data:
+    url.endsWith('/gs/collections') && init.method === 'POST' && typeof init.body === 'string'
+      ? parseJsonText(init.body) : { name: '测试资料库' } }))
   vi.stubGlobal('fetch', fetcher)
   await ctx.plugin(G1brainIntegration, { baseUrl: 'http://127.0.0.1:19091', clientId: 'test', tenantId: '000000', timeoutMs: 1000 })
   const service = ctx.get('g1brain') as G1brainIntegration
@@ -79,10 +81,10 @@ describe('bound G1brain Session tools', () => {
       callId: name as never, name, arguments: argumentsValue, agent: agent as never })
     expect((await call('g1brain_list_ontology_domains', { collectionName: '' })).isError).toBe(true)
     expect(fetcher).not.toHaveBeenCalled()
-    const domains = await call('g1brain_list_ontology_domains', { collectionName: '测试本体' })
+    const domains = await call('g1brain_list_ontology_domains', { collectionName: 'test_ontology' })
     expect(domains.isError).toBe(false)
     expect(parseJsonText(domains.content.find(block => block.type === 'text')?.text)).toEqual([{ name: '设备领域' }])
-    const search = await call('g1brain_hybrid_search', { collectionName: '测试资料库', query: '设备' })
+    const search = await call('g1brain_hybrid_search', { collectionName: '测试资料库', query: 'equipment' })
     expect(search.isError).toBe(false)
     const output = search.content.find(block => block.type === 'text')?.text ?? ''
     expect(output).toContain('[G1brain 结果已截断，请缩小查询范围或分页]')
@@ -102,8 +104,8 @@ describe('bound G1brain Session tools', () => {
     expect(before).toContain('g1brain_hybrid_search')
     expect(before).not.toContain('g1brain_submit_document_task')
     await service.bindSession({ sessionId: session.id, target: {
-      mode: 'new-ontology', folderPath: materials, createOntologyCollectionName: '测试本体',
-      createDomainName: '设备', createDocumentLibraryName: '测试资料库',
+      mode: 'new-ontology', folderPath: materials, createOntologyCollectionName: 'test_ontology',
+      createDomainName: 'equipment', createDocumentLibraryName: '测试资料库',
     } })
     const after = ctx.tools.schemas(agent).map(tool => tool.name).filter(name => name.startsWith('g1brain_'))
     expect(after).toHaveLength(46)
@@ -122,12 +124,12 @@ describe('bound G1brain Session tools', () => {
   it('creates bound resources without a confirmation flag or an approval request', async () => {
     const { ctx, agent, service, session, materials, approval, fetcher } = await harness()
     await service.bindSession({ sessionId: session.id, target: {
-      mode: 'new-ontology', folderPath: materials, createOntologyCollectionName: '测试本体',
-      createDomainName: '设备', createDocumentLibraryName: '测试资料库',
+      mode: 'new-ontology', folderPath: materials, createOntologyCollectionName: 'test_ontology',
+      createDomainName: 'equipment', createDocumentLibraryName: '测试资料库',
     } })
     const created = await ctx.tools.execute({ signal: new AbortController().signal,
       callId: 'automatic-create' as never, name: 'g1brain_create_ontology_collection',
-      arguments: { name: '测试本体' }, agent: agent as never })
+      arguments: { name: 'test_ontology' }, agent: agent as never })
     expect(created.isError).toBe(false)
     expect(approval).not.toHaveBeenCalled()
     expect(fetcher).toHaveBeenCalledTimes(1)
@@ -136,8 +138,8 @@ describe('bound G1brain Session tools', () => {
   it('keeps resource scoping enforced when non-deletion writes no longer need approval', async () => {
     const { ctx, agent, service, session, materials, approval, fetcher } = await harness()
     await service.bindSession({ sessionId: session.id, target: {
-      mode: 'new-ontology', folderPath: materials, createOntologyCollectionName: '测试本体',
-      createDomainName: '设备', createDocumentLibraryName: '测试资料库',
+      mode: 'new-ontology', folderPath: materials, createOntologyCollectionName: 'test_ontology',
+      createDomainName: 'equipment', createDocumentLibraryName: '测试资料库',
     } })
     const call = (argumentsValue: object) => ctx.tools.execute({ signal: new AbortController().signal,
       callId: 'write-test' as never, name: 'g1brain_create_document_library', arguments: argumentsValue, agent: agent as never })
@@ -153,8 +155,8 @@ describe('bound G1brain Session tools', () => {
   it('refuses to resume a bound Session with an inaccessible materials folder instead of silently losing its tools', async () => {
     const { ctx, agent, service, session, materials } = await harness()
     await service.bindSession({ sessionId: session.id, target: {
-      mode: 'new-ontology', folderPath: materials, createOntologyCollectionName: '测试本体',
-      createDomainName: '设备', createDocumentLibraryName: '测试资料库',
+      mode: 'new-ontology', folderPath: materials, createOntologyCollectionName: 'test_ontology',
+      createDomainName: 'equipment', createDocumentLibraryName: '测试资料库',
     } })
     rmSync(materials, { recursive: true })
     await expect(ctx.serial('agent/created', { agent: { ...agent } as never, source: 'resume' })).rejects.toThrow()
@@ -163,17 +165,17 @@ describe('bound G1brain Session tools', () => {
   it('creates repeated properties and updates them without approval or grant limits', async () => {
     const { ctx, agent, service, session, materials, approval, fetcher } = await harness()
     await service.bindSession({ sessionId: session.id, target: {
-      mode: 'new-ontology', folderPath: materials, createOntologyCollectionName: '测试本体',
-      createDomainName: '设备', createDocumentLibraryName: '测试资料库',
+      mode: 'new-ontology', folderPath: materials, createOntologyCollectionName: 'test_ontology',
+      createDomainName: 'equipment', createDocumentLibraryName: '测试资料库',
     } })
     const property = (sid: string) => ctx.tools.execute({ signal: new AbortController().signal,
       callId: `property-${sid}` as never, name: 'g1brain_create_ontology_property',
-      arguments: { collectionName: '测试本体', domainName: '设备', sid, displayName: sid,
+      arguments: { collectionName: 'test_ontology', domainName: 'equipment', sid, displayName: sid,
         valueType: 'STRING', kind: 'SCALAR' }, agent: agent as never })
     for (let index = 0; index < 105; index += 1) expect((await property(`property-${index}`)).isError).toBe(false)
     const updated = await ctx.tools.execute({ signal: new AbortController().signal,
       callId: 'update-property' as never, name: 'g1brain_update_ontology_property',
-      arguments: { collectionName: '测试本体', domainName: '设备', propertySid: 'property-1', properties: { description: '更新说明' } },
+      arguments: { collectionName: 'test_ontology', domainName: 'equipment', propertySid: 'property-1', properties: { description: '更新说明' } },
       agent: agent as never })
     expect(updated.isError).toBe(false)
     expect(fetcher).toHaveBeenCalledTimes(106)
@@ -188,12 +190,12 @@ describe('bound G1brain Session tools', () => {
   ] as const)('blocks %s without explicit intent or when approval is rejected', async (name, target) => {
     const { ctx, agent, service, session, materials, approval, fetcher } = await harness()
     await service.bindSession({ sessionId: session.id, target: {
-      mode: 'new-ontology', folderPath: materials, createOntologyCollectionName: '测试本体',
-      createDomainName: '设备', createDocumentLibraryName: '测试资料库',
+      mode: 'new-ontology', folderPath: materials, createOntologyCollectionName: 'test_ontology',
+      createDomainName: 'equipment', createDocumentLibraryName: '测试资料库',
     } })
     const call = (args: object) => ctx.tools.execute({ signal: new AbortController().signal,
       callId: 'delete-test' as never, name, arguments: args, agent: agent as never })
-    const args = { collectionName: '测试本体', domainName: '设备', ...target }
+    const args = { collectionName: 'test_ontology', domainName: 'equipment', ...target }
     expect((await call(args)).isError).toBe(true)
     expect(approval).not.toHaveBeenCalled()
     expect((await call({ ...args, confirm: false })).isError).toBe(true)
@@ -207,13 +209,13 @@ describe('bound G1brain Session tools', () => {
   it('approves replacement imports as deletions but allows additive imports directly', async () => {
     const { ctx, agent, service, session, materials, approval, fetcher } = await harness()
     await service.bindSession({ sessionId: session.id, target: {
-      mode: 'new-ontology', folderPath: materials, createOntologyCollectionName: '测试本体',
-      createDomainName: '设备', createDocumentLibraryName: '测试资料库',
+      mode: 'new-ontology', folderPath: materials, createOntologyCollectionName: 'test_ontology',
+      createDomainName: 'equipment', createDocumentLibraryName: '测试资料库',
     } })
-    const pkg = { targets: { collection: { defaultName: '测试本体' }, domains: [{ name: '设备' }] } }
+    const pkg = { targets: { collection: { defaultName: 'test_ontology' }, domains: [{ name: 'equipment' }] } }
     const call = (options: object) => ctx.tools.execute({ signal: new AbortController().signal,
       callId: 'package-import' as never, name: 'g1brain_import_ontology_package',
-      arguments: { collectionName: '测试本体', package: pkg, ...options }, agent: agent as never })
+      arguments: { collectionName: 'test_ontology', package: pkg, ...options }, agent: agent as never })
     expect((await call({ replace: false })).isError).toBe(false)
     expect(approval).not.toHaveBeenCalled()
     expect(fetcher).toHaveBeenCalledTimes(1)
@@ -233,8 +235,8 @@ describe('bound G1brain Session tools', () => {
   it('does not grant write access when development writes are disabled', async () => {
     const { ctx, agent, service, session, materials, approval, fetcher } = await harness(false)
     await service.bindSession({ sessionId: session.id, target: {
-      mode: 'new-ontology', folderPath: materials, createOntologyCollectionName: '测试本体',
-      createDomainName: '设备', createDocumentLibraryName: '测试资料库',
+      mode: 'new-ontology', folderPath: materials, createOntologyCollectionName: 'test_ontology',
+      createDomainName: 'equipment', createDocumentLibraryName: '测试资料库',
     } })
     const names = ctx.tools.schemas(agent).map(tool => tool.name)
     expect(names).not.toContain('g1brain_create_ontology_collection')
@@ -242,7 +244,7 @@ describe('bound G1brain Session tools', () => {
     expect(names).toContain('g1brain_read_selected_file')
     const result = await ctx.tools.execute({ signal: new AbortController().signal,
       callId: 'disabled-create' as never, name: 'g1brain_create_ontology_collection',
-      arguments: { name: '测试本体' }, agent: agent as never })
+      arguments: { name: 'test_ontology' }, agent: agent as never })
     expect(result.isError).toBe(true)
     expect(approval).not.toHaveBeenCalled()
     expect(fetcher).not.toHaveBeenCalled()
@@ -251,15 +253,15 @@ describe('bound G1brain Session tools', () => {
   it('never shares or reuses approval between parallel deletions', async () => {
     const { ctx, agent, service, session, materials, approval, fetcher } = await harness()
     await service.bindSession({ sessionId: session.id, target: {
-      mode: 'new-ontology', folderPath: materials, createOntologyCollectionName: '测试本体',
-      createDomainName: '设备', createDocumentLibraryName: '测试资料库',
+      mode: 'new-ontology', folderPath: materials, createOntologyCollectionName: 'test_ontology',
+      createDomainName: 'equipment', createDocumentLibraryName: '测试资料库',
     } })
     const first = Promise.withResolvers<string>(), second = Promise.withResolvers<string>()
     approval.mockImplementation(async request => request.callId === 'delete-first' ? first.promise
       : request.callId === 'delete-second' ? second.promise : 'rejected')
     const call = (nodeId: string) => ctx.tools.execute({ signal: new AbortController().signal,
       callId: `delete-${nodeId}` as never, name: 'g1brain_delete_ontology_property',
-      arguments: { collectionName: '测试本体', domainName: '设备', nodeId, confirm: true }, agent: agent as never })
+      arguments: { collectionName: 'test_ontology', domainName: 'equipment', nodeId, confirm: true }, agent: agent as never })
     const calls = [call('first'), call('second')]
     const settled = Promise.allSettled(calls)
     try {
@@ -285,8 +287,8 @@ describe('bound G1brain Session tools', () => {
     const { ctx, agent, service, session, materials, approval, fetcher } = await harness()
     writeFileSync(join(materials, 'evidence.md'), '# test evidence')
     await service.bindSession({ sessionId: session.id, target: {
-      mode: 'new-ontology', folderPath: materials, createOntologyCollectionName: '测试本体',
-      createDomainName: '设备', createDocumentLibraryName: '测试资料库',
+      mode: 'new-ontology', folderPath: materials, createOntologyCollectionName: 'test_ontology',
+      createDomainName: 'equipment', createDocumentLibraryName: '测试资料库',
     } })
     const invoke = (files: string[]) => ctx.tools.execute({ signal: new AbortController().signal,
       callId: 'upload-test' as never, name: 'g1brain_upload_selected_files',
@@ -305,8 +307,8 @@ describe('bound G1brain Session tools', () => {
   it('submits MD and CHUNK processing tasks only for files in the bound library without approval', async () => {
     const { ctx, agent, service, session, materials, approval, fetcher } = await harness()
     await service.bindSession({ sessionId: session.id, target: {
-      mode: 'new-ontology', folderPath: materials, createOntologyCollectionName: '测试本体',
-      createDomainName: '设备', createDocumentLibraryName: '测试资料库',
+      mode: 'new-ontology', folderPath: materials, createOntologyCollectionName: 'test_ontology',
+      createDomainName: 'equipment', createDocumentLibraryName: '测试资料库',
     } })
     fetcher.mockImplementation(async (url) => {
       if (url.endsWith('/all')) return Response.json({ data: [{ id: 11 }, { id: 12 }] })
@@ -315,7 +317,7 @@ describe('bound G1brain Session tools', () => {
     })
     const submit = (argumentsValue: object) => ctx.tools.execute({ signal: new AbortController().signal,
       callId: 'task-submit' as never, name: 'g1brain_submit_document_task', arguments: argumentsValue, agent: agent as never })
-    expect((await submit({ collectionName: '测试本体', type: 'MD', fileSelection: 'all' })).isError).toBe(true)
+    expect((await submit({ collectionName: 'test_ontology', type: 'MD', fileSelection: 'all' })).isError).toBe(true)
     expect(fetcher).not.toHaveBeenCalled()
     expect((await submit({ collectionName: '其他库', type: 'MD', fileSelection: 'all', confirm: true })).isError).toBe(true)
     expect(approval).not.toHaveBeenCalled()
@@ -344,8 +346,8 @@ describe('bound G1brain Session tools', () => {
   it('reads compact task status, waits for a terminal task, and cancels without deletion approval', async () => {
     const { ctx, agent, service, session, materials, approval, fetcher } = await harness()
     await service.bindSession({ sessionId: session.id, target: {
-      mode: 'new-ontology', folderPath: materials, createOntologyCollectionName: '测试本体',
-      createDomainName: '设备', createDocumentLibraryName: '测试资料库',
+      mode: 'new-ontology', folderPath: materials, createOntologyCollectionName: 'test_ontology',
+      createDomainName: 'equipment', createDocumentLibraryName: '测试资料库',
     } })
     const task = { taskId: 'task-1', type: 'MD', status: 'SUCCESS', terminal: true, objectIds: [11],
       objectStatus: { 11: { states: [{ operation: 'slice', status: 'SUCCESS' }] } } }

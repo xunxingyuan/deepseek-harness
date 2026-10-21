@@ -24,6 +24,59 @@ function home(configured: boolean) {
 }
 
 describe('G1brain landing page', () => {
+  it('hides system domains and selects the only business domain so existing-resource work can proceed', async () => {
+    const openSession = vi.fn(async (_input: Parameters<G1brainHomeProps['openSession']>[0]) => {})
+    render(<G1brainHome t={t} loadCatalog={async () => ({ configured: true, mode: 'local-dev',
+      ontologies: [{ name: 't000000_common', displayName: '公共空间' }], libraries: [{ name: '1015' }] })}
+    loadDomains={async () => [{ name: '_schema' }, { name: '_shared' }, { name: 'common_domain', displayName: '业务领域' }]}
+    pickDirectory={async () => null} openSession={openSession} />)
+    await screen.findByText(zh.connected)
+    fireEvent.click(screen.getByRole('button', { name: zh.modeOptimize }))
+    fireEvent.change(screen.getByLabelText(zh.ontologyExisting), { target: { value: 't000000_common' } })
+    await waitFor(() => { expect(screen.getByLabelText<HTMLSelectElement>(zh.domainExisting).value).toBe('common_domain') })
+    expect(screen.queryByRole('option', { name: '_schema' })).toBeNull()
+    expect(screen.queryByRole('option', { name: '_shared' })).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: zh.libraryExisting }))
+    fireEvent.change(screen.getByLabelText(zh.libraryExistingLabel), { target: { value: '1015' } })
+    expect(screen.getByRole('status').textContent).toContain(zh.needDirectory)
+    fireEvent.change(screen.getByLabelText(zh.directoryPath), { target: { value: '/tmp/materials' } })
+    expect(screen.getByRole('button', { name: zh.proceed }).hasAttribute('disabled')).toBe(false)
+    fireEvent.click(screen.getByRole('button', { name: zh.proceed }))
+    await waitFor(() => { expect(openSession).toHaveBeenCalledTimes(1) })
+    expect(openSession.mock.calls[0]![0].target).toMatchObject({ ontologyCollectionName: 't000000_common', domainName: 'common_domain', documentLibraryName: '1015' })
+  })
+
+  it('does not reuse a domain from the previous collection while loading or after an out-of-order reply', async () => {
+    const a = Promise.withResolvers<Array<{ name: string }>>()
+    const b = Promise.withResolvers<Array<{ name: string }>>()
+    render(<G1brainHome t={t} loadCatalog={async () => ({ configured: true, mode: 'oauth',
+      ontologies: [{ name: 'a' }, { name: 'b' }], libraries: [{ name: 'docs' }] })}
+    loadDomains={name => name === 'a' ? a.promise : b.promise} pickDirectory={async () => null} openSession={async () => {}} />)
+    await screen.findByText(zh.connected)
+    fireEvent.click(screen.getByRole('button', { name: zh.modeOptimize }))
+    fireEvent.change(screen.getByLabelText(zh.ontologyExisting), { target: { value: 'a' } })
+    fireEvent.change(screen.getByLabelText(zh.ontologyExisting), { target: { value: 'b' } })
+    expect(screen.getByRole('status').textContent).toContain(zh.domainsLoading)
+    b.resolve([{ name: 'b_first' }, { name: 'b_second' }])
+    await screen.findByRole('option', { name: 'b_first' })
+    a.resolve([{ name: 'a_domain' }])
+    await waitFor(() => { expect(screen.queryByRole('option', { name: 'a_domain' })).toBeNull() })
+    expect(screen.getByRole('status').textContent).toContain(zh.needDomain)
+    expect(screen.getByLabelText<HTMLSelectElement>(zh.domainExisting).value).toBe('')
+    expect(screen.getByRole('button', { name: zh.proceed }).hasAttribute('disabled')).toBe(true)
+  })
+
+  it('explains a collection with no editable domains instead of offering a system domain', async () => {
+    render(<G1brainHome t={t} loadCatalog={async () => ({ configured: true, mode: 'oauth',
+      ontologies: [{ name: 'empty' }], libraries: [] })} loadDomains={async () => [{ name: '_schema' }, { name: '_shared' }]}
+    pickDirectory={async () => null} openSession={async () => {}} />)
+    await screen.findByText(zh.connected)
+    fireEvent.click(screen.getByRole('button', { name: zh.modeOptimize }))
+    fireEvent.change(screen.getByLabelText(zh.ontologyExisting), { target: { value: 'empty' } })
+    await waitFor(() => { expect(screen.getByRole('status').textContent).toContain(zh.noBusinessDomains) })
+    expect(screen.getByRole('button', { name: zh.proceed }).hasAttribute('disabled')).toBe(true)
+  })
+
   it('shows a connection failure instead of calling configured credentials a live connection', async () => {
     const loadCatalog = vi.fn(async () => ({ configured: true, mode: 'local-dev' as const,
       ontologies: [], libraries: [], error: true,
