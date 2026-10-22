@@ -3,7 +3,7 @@ import type { Context } from '@deepseek-ai/cordis'
 import { LlmAdapter, ToolCallId, type GenerateOptions, type StreamChunk } from '@deepseek-ai/dsh-llm'
 import type {} from '@deepseek-ai/dsh-user-approval'
 
-const calls = [
+const legacyCalls = [
   { name: 'g1brain_list_selected_files', args: {} },
   { name: 'g1brain_read_selected_file', args: { path: '第一张表.md' } },
   { name: 'g1brain_read_selected_file', args: { path: '中文 Word.docx' } },
@@ -15,12 +15,25 @@ const calls = [
   { name: 'g1brain_delete_ontology_property', args: { collectionName: 'col_7c120e3057d72928f5491e86', domainName: 'dom_e4d35bcec9eb3d594c4bdeb7', nodeId: 'obsolete-property', confirm: true } },
 ] as const
 
+const tableCalls = [
+  ...legacyCalls.slice(0, 7),
+  { name: 'g1brain_inspect_materials', args: { files: ['混合数据.xlsx'] } },
+  { name: 'g1brain_upload_selected_files', args: { files: ['混合数据.xlsx'] } },
+  { name: 'g1brain_table_context', args: {} },
+  { name: 'g1brain_list_data_tables', args: {} },
+  { name: 'g1brain_describe_data_table', args: { dataset_id: 'data-test' } },
+  { name: 'g1brain_query_data_tables', args: { sql: 'SELECT SUM(output) AS total FROM data_test' } },
+  { name: 'g1brain_get_table_imports', args: {} },
+] as const
+
 class WorkflowAdapter extends LlmAdapter {
   override async resolveModel(provider: string, model: string) {
     return { provider, id: model, name: model }
   }
 
   async * stream(options: GenerateOptions): AsyncIterable<StreamChunk> {
+    const tables = process.env.G1BRAIN_TEST_TABLES === '1'
+    const calls = tables ? tableCalls : legacyCalls
     const tools = options.tools ?? []
     for (const call of calls) {
       if (!tools.some(tool => tool.name === call.name)) throw new Error(`G1brain workflow tool missing: ${call.name}`)
@@ -42,7 +55,9 @@ class WorkflowAdapter extends LlmAdapter {
       yield { type: 'finish', reason: { kind: 'tool-calls' } }
       return
     }
-    const answer = '已读取中文材料并直接创建周报本体、领域和文档库；废弃属性经审批后删除。'
+    if (tables && completed >= tableCalls.length && (!text.includes('215') || !text.includes('completed'))) throw new Error('Table evidence missing')
+    const answer = tables ? '已分流 Excel：数据表导入完成，说明进入文档库；SQL 总产量为 215。'
+      : '已读取中文材料并直接创建周报本体、领域和文档库；废弃属性经审批后删除。'
     yield { type: 'block-start', index: 0, blockType: 'text' }
     yield { type: 'text-delta', index: 0, text: answer }
     yield { type: 'block-end', index: 0, block: { type: 'text', text: answer } }

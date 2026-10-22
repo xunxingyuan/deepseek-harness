@@ -57,6 +57,16 @@ it('limits product documents to update status and a native confirmation action',
   expect(electron.ipcRenderer.off).toHaveBeenCalledWith(DESKTOP_IPC.updatesPresentation, handler)
 })
 
+it('exposes sign-out without connection writes only to the owning product document', async () => {
+  vi.stubGlobal('location', new URL('dsh-app://app/'))
+  await import('../src/preload-app.ts')
+  const api = electron.contextBridge.exposeInMainWorld.mock.calls.find(([name]) => name === 'dshDesktop')?.[1] as DshDesktopProductApi
+  electron.ipcRenderer.invoke.mockResolvedValue(false)
+  expect(await api.g1brain.signOut()).toBe(false)
+  expect(electron.ipcRenderer.invoke).toHaveBeenCalledExactlyOnceWith(DESKTOP_IPC.g1brainSignOut)
+  expect(Object.keys(api.g1brain)).toEqual(['signOut'])
+})
+
 it.each(['dsh-app://shell/plugin-manager.html', 'dsh-app://other/index.html', 'https://shell/startup.html', 'http://example.com/'])('exposes only the carrier marker to %s', async (url) => {
   vi.stubGlobal('location', new URL(url))
   await import('../src/preload-app.ts')

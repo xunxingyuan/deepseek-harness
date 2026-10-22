@@ -83,6 +83,20 @@ jobs:
         run: pnpm exec vitest run packages/g1brain/integration/tests/bindings.spec.ts packages/g1brain/integration/tests/bundle.spec.ts packages/g1brain/integration/tests/materials.spec.ts packages/g1brain/integration/tests/names.spec.ts packages/g1brain/integration/tests/resource-creation.spec.ts packages/g1brain/integration/tests/tool-schema.spec.ts packages/g1brain/integration/tests/session-tools.spec.ts packages/g1brain/integration/tests/integration.spec.ts packages/client/ui-g1brain/tests/home.client.spec.tsx packages/client/ui-g1brain/tests/preparation.client.spec.ts packages/client/ui-plugin-manager/tests/browser-plugin.client.spec.tsx packages/client/ui-schedule/tests/browser-plugin.client.spec.ts
       - name: Build application libraries
         run: pnpm run build:official
+      - name: Verify Excel data routing
+        run: pnpm exec vitest run packages/g1brain/integration/tests/excel-routing.spec.ts packages/g1brain/integration/tests/table-routing.spec.ts
+      - name: Verify G1brain connection settings and sign-out
+        run: >-
+          pnpm exec vitest run
+          apps/desktop/tests/g1brain-auth.spec.ts
+          apps/desktop/tests/g1brain-connections.spec.ts
+          apps/desktop/tests/welcome-window.spec.ts
+          apps/desktop/tests/welcome-renderer.client.spec.tsx
+          apps/desktop/tests/welcome-startup.spec.ts
+          apps/desktop/tests/main-startup.spec.ts
+          apps/desktop/tests/preload-app.spec.ts
+          packages/client/ui-g1brain/tests/sign-out.client.spec.tsx
+          packages/client/ui-g1brain/tests/registration.client.spec.tsx
       - name: Verify prepared Session through the real Loader
         env:
           DSH_EXAMPLE_MODE: lib

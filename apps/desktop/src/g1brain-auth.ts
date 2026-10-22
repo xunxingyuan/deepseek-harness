@@ -9,6 +9,9 @@ const DEFAULT_PUBLIC_KEY = '0445d8d7059501ed8f96f3b8baa4215bd215ef1e67a923a73da6
 /** Existing G1brain API used by local development and explicitly marked unsigned test packages. */
 export const DEFAULT_G1BRAIN_DEV_BASE_URL = 'http://192.168.100.113:19091'
 
+/** Table-data service used by the explicitly enabled G1brain development connection. */
+export const DEFAULT_G1BRAIN_TABLE_DEV_BASE_URL = 'http://192.168.100.113:8090'
+
 /** Supply the development API identity to a local-development or unsigned-test Desktop Host.
  * @param environment - inherited desktop environment; explicit overrides win.
  * @param development - whether the Electron app is unpackaged.
@@ -27,6 +30,7 @@ export function g1brainDevelopmentHostEnvironment(
   if ((!development && !testPackage) || mode !== 'local-dev') return {}
   return {
     G1BRAIN_BASE_URL: environment.G1BRAIN_BASE_URL?.trim() || DEFAULT_G1BRAIN_DEV_BASE_URL,
+    G1BRAIN_TABLE_BASE_URL: environment.G1BRAIN_TABLE_BASE_URL?.trim() || DEFAULT_G1BRAIN_TABLE_DEV_BASE_URL,
     G1BRAIN_LOCAL_USER_ID: environment.G1BRAIN_LOCAL_USER_ID?.trim() || 'developer',
     G1BRAIN_LOCAL_CLIENT_ID: environment.G1BRAIN_LOCAL_CLIENT_ID?.trim() || 'g1brain-web',
     G1BRAIN_ALLOW_LOCAL_DEV: '1',
@@ -43,6 +47,7 @@ export class G1brainAuth {
   private token: string | undefined
   private localAccount: string | undefined
   private expiresAt = 0
+  private generation = 0
 
   constructor(
     private readonly environment: () => NodeJS.ProcessEnv,
@@ -58,6 +63,14 @@ export class G1brainAuth {
   /** @returns the explicit OAuth mode or the development-only local login mode. */
   get mode(): 'local-dev' | 'oauth' { return this.environment().G1BRAIN_AUTH_MODE === 'oauth' ? 'oauth' : 'local-dev' }
 
+  /** Forget process-local credentials and invalidate any unfinished login response. */
+  signOut(): void {
+    this.generation++
+    this.localAccount = undefined
+    this.token = undefined
+    this.expiresAt = 0
+  }
+
   /**
    * Exchange one username and password with G1brain OAuth; retain only the access token in memory.
    * @param username - G1brain account name.
@@ -65,6 +78,7 @@ export class G1brainAuth {
    * @returns a renderer-safe result without backend response details.
    */
   async login(username: string, password: string): Promise<G1brainLoginResult> {
+    const generation = ++this.generation
     const account = username.trim()
     if (account === '' || password === '') return { ok: false, reason: 'invalid-credentials' }
     const env = this.environment()
@@ -88,7 +102,7 @@ export class G1brainAuth {
     const form = new URLSearchParams({ tenantId, username: account, password: encrypted, grant_type: 'password', scope: 'all', type: 'account' })
     try {
       const response = await this.send(new URL('api/blade-auth/oauth/token', `${baseUrl.href.replace(/\/$/u, '')}/`), {
-        method: 'POST', signal: AbortSignal.timeout(20_000),
+        method: 'POST', redirect: 'error', signal: AbortSignal.timeout(20_000),
         headers: {
           Authorization: `Basic ${Buffer.from(`${clientId}:${secret}`, 'utf8').toString('base64')}`,
           'Tenant-Id': tenantId,
@@ -101,6 +115,7 @@ export class G1brainAuth {
       const value: unknown = await response.json()
       const payload = isRecord(value) && isRecord(value.data) ? value.data : value
       if (!isRecord(payload) || typeof payload.access_token !== 'string' || payload.access_token === '') return { ok: false, reason: 'unavailable' }
+      if (generation !== this.generation) return { ok: false, reason: 'unavailable' }
       this.token = payload.access_token
       this.expiresAt = typeof payload.expires_in === 'number' && payload.expires_in > 30
         ? Date.now() + (payload.expires_in - 30) * 1000 : 0

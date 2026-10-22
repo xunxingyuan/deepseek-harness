@@ -68,7 +68,7 @@
 .field select { min-height: 38px; padding: 0 12px; border: 0.5px solid var(--dsw-alias-border-l3); border-radius: var(--dsw-radius-sm); background: var(--dsw-alias-bg-layer-1); color: var(--dsw-alias-label-primary); font: inherit; font-size: 13px; }
 .field select:disabled { opacity: .55; }
 .hint { display: block; margin-top: 9px; color: var(--dsw-alias-label-tertiary); font-size: 12px; font-weight: 400; }
-.segment { display: inline-flex; gap: 4px; padding: 4px; margin-bottom: 22px; border: 0.5px solid var(--dsw-alias-border-l2); border-radius: var(--dsw-radius-sm); background: var(--dsw-alias-bg-multi-select); }
+.segment { display: inline-flex; flex-wrap: wrap; gap: 4px; padding: 4px; margin-bottom: 22px; border: 0.5px solid var(--dsw-alias-border-l2); border-radius: var(--dsw-radius-sm); background: var(--dsw-alias-bg-multi-select); }
 .segment button { padding: 7px 14px; border: 0; border-radius: var(--dsw-radius-sm); color: var(--dsw-alias-label-secondary); background: transparent; font-size: 12px; font-weight: 600; cursor: pointer; }
 .segment button[aria-pressed='true'] { color: var(--dsw-alias-label-primary); background: var(--dsw-alias-bg-layer-1); box-shadow: 0 1px 4px var(--dsw-alias-border-l3); }
 .directory { display: flex; align-items: flex-end; gap: 16px; min-height: 46px; }

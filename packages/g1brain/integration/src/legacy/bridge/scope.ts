@@ -80,14 +80,23 @@ class WorkspaceScopeImpl {
   }
 
   async read(relativePath: string, maxBytes = 2 * 1024 * 1024): Promise<string> {
-    const file = await this.inspect(relativePath)
-    const bytes = await readFile(file.absolutePath)
-    if (bytes.length > this.options.maxFileBytes) throw new ScopeError('文件超过大小上限', relativePath)
+    const { file, bytes } = await this.readBytes(relativePath)
     try {
       return await extractMaterial(bytes, file.extension, maxBytes, this.options.maxFileBytes)
     } catch (error) {
       throw new ScopeError(`${relativePath} 正文提取失败：${error instanceof Error ? error.message : String(error)}`, relativePath)
     }
+  }
+
+  /** Read preflighted source bytes without interpreting Office content.
+   * @param relativePath - source path within the selected Workspace.
+   * @returns immutable-operation source bytes and canonical file metadata.
+   */
+  async readBytes(relativePath: string): Promise<{ file: ScopeFile; bytes: Buffer }> {
+    const file = await this.inspect(relativePath)
+    const bytes = await readFile(file.absolutePath)
+    if (bytes.length > this.options.maxFileBytes) throw new ScopeError('文件超过大小上限', relativePath)
+    return { file, bytes }
   }
 
   async prepareUploads(paths: string[]): Promise<Array<{ path: string; uploadName: string; contents: string }>> {

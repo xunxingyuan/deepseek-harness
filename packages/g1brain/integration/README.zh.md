@@ -9,7 +9,7 @@ kind: "package-reference"
 
 ## 概述
 
-桌面配置默认启用此宿主插件。它向工作台提供本体集合、领域和文档库目录。目录响应保留 API 名称和可选显示名；工作台优先展示易读名称，会话绑定仍使用 API 名称。任意普通桌面会话可使用 16 个只读发现与检索工具。新准备的 G1brain 会话会先绑定所选目录、本体集合与领域、文档库，再向该会话智能体提供完整的 46 个本体和文档工具。访问令牌只保存在宿主进程中。
+桌面工作台显示本体、领域和文档库目录的显示名，并保留 API 标识。普通会话有 16 个只读发现与检索工具。准备会话先绑定材料目录和本体目标，再提供 46 个限定范围工具；配置表格服务后为 55 个。规整 Excel 工作表进入按领域绑定的数据集合，说明性工作表进入所选向量文档库。仅表格会话无需选择向量文档库。服务凭据保留在宿主侧。
 
 ## 目录
 
@@ -25,13 +25,24 @@ kind: "package-reference"
 
 本地开发桌面版或带有明确标记的未签名测试安装包会提供 `G1BRAIN_BASE_URL`（`http://192.168.100.113:19091`）、`G1BRAIN_LOCAL_USER_ID`（`developer`）、`G1BRAIN_LOCAL_CLIENT_ID`（`g1brain-web`）、`G1BRAIN_ALLOW_LOCAL_DEV=1` 和 `G1BRAIN_ALLOW_DEV_WRITES=1`；环境变量可覆盖这些默认值。宿主会沿用旧客户端的 `X-User-Id`、`X-Client-Id` 请求头；此测试身份与登录时输入的用户名无关。开发和未签名测试配置均启用写入，并不代表登录用户的真实授权。其他部署须自行配置服务地址和认证参数。OAuth 模式需设置 `G1BRAIN_ACCESS_TOKEN` 与 `G1BRAIN_CLIENT_SECRET`（可选设置 `G1BRAIN_CLIENT_ID`）；宿主会发送 Basic 认证与 `Blade-Auth`。`G1BRAIN_TENANT_ID` 默认是 `000000`。没有对应认证参数时，插件仍启用但报告 `configured: false`，目录调用会明确报错。桌面登录暂未向宿主服务传递登录身份或 OAuth 令牌。
 
-工作台为新的顶层会话调用 `bindSession`。宿主校验所选目录就是该会话的工作区，并将完整目标保存于仅所有者可读写的私有绑定文件。46 个工具只安装在对应智能体范围；恢复智能体时重新读取绑定。工具执行时再次检查会话、目标、原始输入结构和目录范围。新增、修改、上传、文档处理任务提交/取消及追加式整包导入无需额外确认。删除和 `replace=true` 的整包导入须提供 `confirm=true`，并逐次取得 Harness 审批；此参数只表示删除意图，不代表用户已经批准。删除授权不共享、不复用。适用的非删除工具保留可选的旧版确认参数。上传仍须明确列出文件并逐一预检路径。旧版的 5 个智能体管理工具有意不开放。
+工作台为新的顶层会话调用 `bindSession`。宿主校验所选目录就是该会话的工作区，并将完整目标保存于仅所有者可读写的私有绑定文件。限定范围工具只安装在对应智能体中；恢复智能体时重新读取绑定。工具执行时再次检查会话、目标、原始输入结构和目录范围。新增、修改、上传、文档处理任务提交/取消及追加式整包导入无需额外确认。删除和 `replace=true` 的整包导入须提供 `confirm=true`，并逐次取得 Harness 审批；此参数只表示删除意图，不代表用户已经批准。删除授权不共享、不复用。适用的非删除工具保留可选的旧版确认参数。上传仍须明确列出文件并逐一预检路径。旧版的 5 个智能体管理工具有意不开放。
 
 文档处理沿用当前 G1brain 网页的 MD 接口：上传后先提交 `MD` 切片任务并确认成功，再提交 `CHUNK` 的关键词、向量化和索引操作。提交工具可选择绑定文档库内的全部现有文件，也可指定经过该库校验的文档 ID。7 个任务工具覆盖提交、当前/历史列表、详情、逐文件状态、限时等待与取消。列表和详情只返回摘要，避免大型任务占满模型上下文。
 
 新绑定会将用户输入的本体集合和领域名称保留为显示名，将不安全的名称转换为稳定且按会话区分的 ASCII 标识。已经有效的小写标识保持不变。集合显示名保存到 `attributes.displayName`；领域显示名通过配置 `PATCH` 保存并回读验证。绑定回执返回持久化后的标识，用于会话说明；创建工具同时返回标识与显示名。已有资源引用和旧绑定不会在读取时改名。旧绑定中的不安全创建标识会在发送请求前报错，此时应重新准备会话。系统 schema/shared 领域不能绑定为优化目标，也不能作为限定范围写入工具的操作目标。领域创建后的显示名保存失败，可能留下未设置预期显示名的新领域；工具会报告失败，不会宣称全部成功。
 
-文件读取会提取 DOCX 段落与表格，以及按工作表分组的 XLSX/XLS 单元格。文本输入支持严格 UTF-8 或带 BOM 的 UTF-16；其他编码会报错，不会插入替换字符。上传复用相同解析，将 UTF-8 Markdown 而非 Office 原始二进制发送到 MD API。非 Markdown 文件保留原后缀并追加 `.md`，因此 `report.docx` 与 `report.xlsx` 不会混淆。首次请求前须确保所有文件解析成功且上传名称不重复。原文件保持不变。配置的文件大小上限同时约束 Office 解压总量和整批正文的 UTF-8 总量；读取还会独立校验请求的输出上限，不截断正文。开始上传后若 HTTP 请求失败，仍可能留下部分已上传文件。文档任务的 `collectionName` 是绑定文档库的 API 名称，不能使用本体集合、领域或显示名称。
+文件读取会提取 DOCX 段落与表格，以及按工作表分组的 XLSX/XLS 单元格。文本输入支持严格 UTF-8 或带 BOM 的 UTF-16；其他编码会报错，不会插入替换字符。文档上传将提取出的 UTF-8 Markdown 而非 Office 原始二进制发送到 MD API。非 Markdown 文档保留原后缀并追加 `.md`，因此 `report.docx` 与 `report.xlsx` 不会混淆。首次请求前须确保所有文件解析成功且上传名称不重复。原文件保持不变。文件大小上限约束 Office 解压总量；读取另有输出上限，不截断正文。开始上传后若 HTTP 请求失败，可能留下部分已上传文件。文档任务的 `collectionName` 是绑定文档库的 API 名称，不能使用本体集合、领域或显示名称。
+
+<a id="excel-data-routing"></a>
+### Excel 数据分流
+
+在集成中设置 `tableBaseUrl`，或在桌面配置中设置 `G1BRAIN_TABLE_BASE_URL`，即可启用表格服务。本地开发和带有明确未签名测试标记的桌面配置默认使用 `http://192.168.100.113:8090`；显式环境变量优先。`tableTimeoutMs` 默认 120000，`tableMaxUploadBytes` 默认 26214400。这些设置不会向表格服务发送 G1brain 凭据。当前服务没有应用级认证，只应部署在可信开发网络，不应直接公开。
+
+预检按工作表分类 XLSX/XLS。完整、不重复的文本表头和规则记录生成仅含已保存值的 XLSX；正文、含义不明的表头、合并数据、合计和未计算公式仍按文档处理。混合文件生成数据工作簿及 `.notes.md` 文档。不修改源文件，不执行公式或外部引用。文本编号和带前导零的数字编号仍保存为文本；不安全的大整数明确报错，不导入已舍入值。上限为每批 20 个文件、每本 50 个工作表、每表 200 列及 100000 条记录、200 万个检查单元格，以及整批 50 MiB 派生上传内容。未选择向量文档库而存在文档内容时，整批会在任何写入前被阻止。不配置表格服务时，仍保留原有全部转 Markdown 的流程。
+
+宿主将每组 G1brain 服务/租户/集合/领域及表格服务地址绑定到一个表格集合。集合优先使用领域显示名，否则使用 API 名称。同名的其他来源集合不会被复用，而是追加稳定后缀。私有、带版本的映射和上传记录保存在 `$DSH_HOME/g1brain/tables`。内容相同且已接受的上传复用回执；尚未解决的上传意图阻止盲目重试。传输后断网或崩溃时，需由操作人员核对服务端任务后再决定重试。修改服务配置会建立不同映射，不会迁移之前的表格数据。
+
+上传返回已接受的任务 ID，而非已完成的数据表。需查询领域导入状态：只有 `completed` 表示完成；`partial`、`needs_input`、`failed` 以及不在服务最近 100 个任务中的结果均属于未完成或未知。表头修复只可为本领域拥有的阻塞任务补齐明确缺失的列名，不能舍弃列。表格工具通过绑定集合的 MCP 端点读取结构并执行只读 SQL，服务端仍须执行范围校验。精确小数和大整数字符串保持原样返回。表格导入不提交 MD/CHUNK 任务，也不自动创建本体个体。集合删除不作为自动工具开放；服务的删除集合端点会保留数据表及原始文件。
 
 绑定存储在 POSIX 上检查私有目录权限；Windows 依赖当前用户配置目录的 ACL，不以合成的 POSIX 权限位判断。目录匹配采用对应平台的路径比较规则，包括 Windows 盘符大小写。恢复智能体时若无法读取绑定或材料目录，会使初始化失败，而非悄悄退回只读工具。
 
@@ -72,7 +83,9 @@ If write tools are absent, explain that this Session is read-only and direct the
 
 Before writing in a prepared Session, call g1brain_context and use its bound collection and domain API names for creation and all later references. Display names are labels only; never translate or regenerate bound identifiers. System domains such as _schema and _shared are not business write targets.
 
-Use g1brain_read_selected_file to extract DOCX or Excel text and tables, not a raw text read of Office bytes. Upload tools extract UTF-8 Markdown before ingestion. Unsupported or encrypted files must be converted first; never upload garbled text as a successful extraction. Document uploads and processing tasks use the document library API name from the Session context, not the ontology collection name or a display name.
+Use g1brain_read_selected_file to extract DOCX or Excel text and tables, not a raw text read of Office bytes. Document uploads extract UTF-8 Markdown before ingestion. Unsupported or encrypted files must be converted first; never upload garbled text as a successful extraction. Document uploads and processing tasks use the document library API name from the Session context, not the ontology collection name or a display name.
+
+When g1brain_inspect_materials is available, inspect selected sources before importing. The upload tool routes regular Excel worksheets to the domain-bound table collection and explanatory sheets to the selected vector document library. Mixed workbooks are split by worksheet without changing the original. Only document uploads need MD/CHUNK tasks; table uploads return job IDs and require g1brain_get_table_imports to report completed. partial, failed, needs_input, and missing jobs are not success. Do not repeat an uncertain write. For table answers use g1brain_list_data_tables, g1brain_describe_data_table, and read-only SQL through g1brain_query_data_tables, not vector search arithmetic. Do not discard columns or invent missing header meanings. Same collection names alone do not authorize reusing another ontology domain’s table collection.
 
 In a prepared Session, inspect the sources and cite evidence. Execute requested creation, updates, uploads, and document processing within the bound resources without asking for extra confirmation. A request only for information or a plan is not a request to write data. Ask clarification questions only when the intended scope or business requirement is ambiguous.
 
@@ -91,7 +104,7 @@ Deletion and replacement imports that may remove existing content require approv
 
 #### 模型看到的内容
 
-配置 API 凭据后，每个智能体可见 16 个 G1brain 资源发现与文档检索只读工具，包括 `g1brain_list_ontology_domains` 和 `g1brain_hybrid_search`。两个全局顶层目录工具只返回名称；其他全局查询返回有长度限制的文本。绑定会话还可见 46 个限定范围的所选文件、文档库、文档处理任务、检索、本体实体、关系、属性、关系类型及包校验/导入工具，其中目录工具可返回完整后端记录。未绑定会话看不到这些限定范围的工具；关闭写入时，写入工具不会出现。结果以普通文本显示在会话中。
+配置 API 凭据后，每个智能体可见 16 个 G1brain 资源发现与文档检索只读工具，包括 `g1brain_list_ontology_domains` 和 `g1brain_hybrid_search`。两个全局顶层目录工具只返回名称；其他全局查询返回有长度限制的文本。绑定会话可见 46 个限定范围的本体/文档工具，配置表格服务后另有 9 个预检、表格查询、导入状态及表头修复工具，其中目录工具可返回完整后端记录。未绑定会话看不到这些限定范围工具；关闭写入时，写入工具不会出现。结果以普通文本显示在会话中。
 
 #### Token 影响
 
@@ -111,6 +124,7 @@ Deletion and replacement imports that may remove existing content require approv
 - Office 提取保留可读正文与表格，不保留页面版式、图表、图片或 OCR。Excel 公式使用已保存的缓存结果，或显示未计算的公式；不执行公式、宏或外部引用。旧版 DOC、PDF 与 PowerPoint 文件须先转换为支持的格式，才能由这些文件工具读取或上传。加密或损坏的 Office 文件会明确报错。文档库中已有乱码不会自动修复或覆盖。
 - 会话绑定后目标固定；切换资源需要新建会话。全局发现与检索工具可查询宿主配置身份能够访问的任意集合，但不能修改数据。
 - 通过环境变量提供的 OAuth 凭据尚未与其他宿主插件及未来子进程隔离；在实现专用凭据传递前只能使用开发凭据。
+- Excel 分类采取保守规则，不推断业务结构。含义不明的工作表需走文档处理或人工整理。数字单元格在客户端读取前可能已经丢失精度，长编号和精确小数应保存为文本。表格集合不能代替生产身份认证、跨设备上传去重或自动逐行映射本体。
 
 <a id="dev-note"></a>
 ### 开发备注

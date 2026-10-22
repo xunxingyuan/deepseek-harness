@@ -31,7 +31,7 @@ afterEach(async () => {
   for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true })
 })
 
-async function harness(allowWrites = true) {
+async function harness(allowWrites = true, tableBaseUrl = '') {
   const root = mkdtempSync(join(tmpdir(), 'g1brain-session-tools-'))
   roots.push(root)
   const materials = join(root, 'materials')
@@ -61,12 +61,44 @@ async function harness(allowWrites = true) {
     url.endsWith('/gs/collections') && init.method === 'POST' && typeof init.body === 'string'
       ? parseJsonText(init.body) : { name: '测试资料库' } }))
   vi.stubGlobal('fetch', fetcher)
-  await ctx.plugin(G1brainIntegration, { baseUrl: 'http://127.0.0.1:19091', clientId: 'test', tenantId: '000000', timeoutMs: 1000 })
+  const fiber = await ctx.plugin(G1brainIntegration, { baseUrl: 'http://127.0.0.1:19091', clientId: 'test', tenantId: '000000', timeoutMs: 1000, tableBaseUrl })
   const service = ctx.get('g1brain') as G1brainIntegration
-  return { ctx, scope, session, agent, service, approval, fetcher, materials }
+  return { ctx, scope, session, agent, service, approval, fetcher, materials, fiber }
 }
 
 describe('bound G1brain Session tools', () => {
+  it.each([true, false])('keeps table-only Sessions scoped, with writes enabled: %s', async (allowWrites) => {
+    const { ctx, agent, service, session, materials, approval, fetcher } = await harness(allowWrites, 'http://127.0.0.1:8090')
+    await service.bindSession({ sessionId: session.id, target: { mode: 'new-ontology', folderPath: materials,
+      createOntologyCollectionName: 'test_ontology', createDomainName: 'production' } })
+    const names = ctx.tools.schemas(agent).map(tool => tool.name).filter(name => name.startsWith('g1brain_'))
+    if (allowWrites) expect(names).toHaveLength(55)
+    expect(names).toContain('g1brain_inspect_materials')
+    expect(names).toContain('g1brain_query_data_tables')
+    expect(names.includes('g1brain_fill_table_headers')).toBe(allowWrites)
+    const execute = (name: string, args: object) => ctx.tools.execute({ signal: new AbortController().signal,
+      callId: name as never, name, arguments: args, agent: agent as never })
+    expect((await execute('g1brain_table_context', {})).isError).toBe(false)
+    expect((await execute('g1brain_hybrid_search', { collectionName: 'foreign_library', query: 'secret' })).isError).toBe(true)
+    expect(fetcher).not.toHaveBeenCalled()
+    expect(approval).not.toHaveBeenCalled()
+  })
+
+  it('rejects a table-only binding when the table service is absent', async () => {
+    const { service, session, materials } = await harness()
+    await expect(service.bindSession({ sessionId: session.id, target: { mode: 'new-ontology', folderPath: materials,
+      createOntologyCollectionName: 'test_ontology', createDomainName: 'production' } })).rejects.toThrow('表格服务')
+  })
+
+  it('refuses to resume a table-only Session after its table service is disabled', async () => {
+    const { ctx, agent, service, session, materials, fiber } = await harness(true, 'http://127.0.0.1:8090')
+    await service.bindSession({ sessionId: session.id, target: { mode: 'new-ontology', folderPath: materials,
+      createOntologyCollectionName: 'test_ontology', createDomainName: 'production' } })
+    await fiber.dispose()
+    await ctx.plugin(G1brainIntegration, { baseUrl: 'http://127.0.0.1:19091', clientId: 'test', tenantId: '000000', timeoutMs: 1000 })
+    await expect(ctx.serial('agent/created', { agent: { ...agent } as never, source: 'resume' })).rejects.toThrow('恢复表格服务配置')
+  })
+
   it('lets an ordinary Session discover domains and search documents without exposing writes', async () => {
     const { ctx, agent, approval, fetcher } = await harness()
     fetcher.mockImplementation(async (url, init) => {

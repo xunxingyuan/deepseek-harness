@@ -16,9 +16,56 @@ export function Welcome({ api }: { api: WelcomeApi }) {
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
   const [localMode, setLocalMode] = useState(false)
+  const [settingsOpen, setSettingsOpen] = useState(false)
+  const [baseUrl, setBaseUrl] = useState('')
+  const [tableBaseUrl, setTableBaseUrl] = useState('')
+  const [notice, setNotice] = useState('')
   const busyRef = useRef(false)
   const mounted = useRef(true)
   const usernameInput = useRef<HTMLInputElement>(null)
+  const addressInput = useRef<HTMLInputElement>(null)
+
+  useEffect(() => {
+    if (settingsOpen) addressInput.current?.focus()
+    else usernameInput.current?.focus()
+  }, [settingsOpen])
+
+  async function openSettings() {
+    if (busyRef.current) return
+    busyRef.current = true
+    setBusy(true)
+    setError('')
+    setNotice('')
+    setPassword('')
+    try {
+      const settings = await api.readConnections()
+      if (!mounted.current) return
+      setBaseUrl(settings.baseUrl)
+      setTableBaseUrl(settings.tableBaseUrl)
+      setSettingsOpen(true)
+    } catch (_failedRead: unknown) {
+      if (mounted.current) setError(m.g1brainConnectionFailed)
+    } finally { busyRef.current = false; if (mounted.current) setBusy(false) }
+  }
+
+  async function saveSettings(event: FormEvent) {
+    event.preventDefault()
+    if (busyRef.current) return
+    busyRef.current = true
+    setBusy(true)
+    setError('')
+    try {
+      const result = await api.saveConnections({ baseUrl: baseUrl.trim(), tableBaseUrl: tableBaseUrl.trim() })
+      if (!mounted.current) return
+      if (result.ok) {
+        setSettingsOpen(false)
+        setNotice(m.g1brainConnectionSaved)
+      } else setError(result.reason === 'invalid-address' ? m.g1brainConnectionInvalid
+        : result.reason === 'busy' ? m.g1brainConnectionBusy : m.g1brainConnectionFailed)
+    } catch (_failedSave: unknown) {
+      if (mounted.current) setError(m.g1brainConnectionFailed)
+    } finally { busyRef.current = false; if (mounted.current) setBusy(false) }
+  }
 
   useEffect(() => {
     mounted.current = true
@@ -55,9 +102,29 @@ export function Welcome({ api }: { api: WelcomeApi }) {
 
   return <>
     <div className="titlebar" aria-hidden="true" />
-    <main className="welcome" aria-labelledby="g1brain-login-title">
+    <main className="welcome" aria-labelledby={settingsOpen ? 'g1brain-connections-title' : 'g1brain-login-title'}>
       <img className="brand" src="assets/welcome-brand.svg" alt="" aria-hidden="true" width="472" height="40" />
-      <form id="g1brain-login-form" className="key-form g1brain-form" noValidate onSubmit={(event) => { void submit(event) }} aria-busy={busy}>
+      {settingsOpen ? <form id="g1brain-connections-form" className="key-form connection-form" noValidate
+        onSubmit={(event) => { void saveSettings(event) }} aria-busy={busy}>
+        <header className="key-heading">
+          <h1 id="g1brain-connections-title">{m.g1brainConnectionSettings}</h1>
+          <p>{m.g1brainConnectionDescription}</p>
+        </header>
+        <div className="g1brain-fields">
+          <label className="key-field" htmlFor="g1brain-service-address"><span>{m.g1brainServiceAddress}</span>
+            <input ref={addressInput} id="g1brain-service-address" type="url" autoComplete="off" spellCheck={false}
+              required disabled={busy} value={baseUrl} onChange={(event) => { setBaseUrl(event.target.value); setError('') }}
+              aria-describedby="g1brain-address-hint" />
+          </label>
+          <label className="key-field" htmlFor="g1brain-table-address"><span>{m.g1brainTableAddress}</span>
+            <input id="g1brain-table-address" type="url" autoComplete="off" spellCheck={false} disabled={busy}
+              value={tableBaseUrl} onChange={(event) => { setTableBaseUrl(event.target.value); setError('') }}
+              aria-describedby="g1brain-address-hint" />
+          </label>
+          <p id="g1brain-address-hint" className="connection-hint">{m.g1brainAddressHint}</p>
+          {error && <p className="g1brain-error" role="alert">{error}</p>}
+        </div>
+      </form> : <form id="g1brain-login-form" className="key-form g1brain-form" noValidate onSubmit={(event) => { void submit(event) }} aria-busy={busy}>
         <header className="key-heading">
           <h1 id="g1brain-login-title">{m.g1brainLoginTitle}</h1>
           <p>{m.g1brainLoginDescription}</p>
@@ -75,12 +142,21 @@ export function Welcome({ api }: { api: WelcomeApi }) {
               value={password} disabled={busy} onChange={(event) => { setPassword(event.target.value); setError('') }} />
           </label>
           <p id="g1brain-login-error" className="g1brain-error" role="alert" hidden={error === ''}>{error}</p>
+          {notice && <p className="connection-hint" role="status">{notice}</p>}
         </div>
-      </form>
+      </form>}
       <div className="actions">
-        <button id="g1brain-login-submit" className="primary" type="submit" form="g1brain-login-form" disabled={busy}>
-          {busy ? m.g1brainLoggingIn : m.g1brainLoginSubmit}
-        </button>
+        {settingsOpen ? <>
+          <button className="primary" type="submit" form="g1brain-connections-form" disabled={busy}>
+            {busy ? m.g1brainConnectionSaving : m.g1brainConnectionSave}
+          </button>
+          <button className="secondary" type="button" disabled={busy} onClick={() => { setSettingsOpen(false); setError('') }}>{m.cancel}</button>
+        </> : <>
+          <button id="g1brain-login-submit" className="primary" type="submit" form="g1brain-login-form" disabled={busy}>
+            {busy ? m.g1brainLoggingIn : m.g1brainLoginSubmit}
+          </button>
+          <button className="connection-settings" type="button" disabled={busy} onClick={() => { void openSettings() }}>{m.g1brainConnectionSettings}</button>
+        </>}
       </div>
     </main>
   </>

@@ -1,0 +1,19 @@
+# Bilingual-pair consistency record for 2026-10-22-g1brain-excel-routing.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write .agents/notes/implemented/feature/2026-10-22-g1brain-excel-routing.md
+/agent-note-domain-bound-excel-data-routing:
+  en: 8d572394ba82f8a0
+  zh: 01881316d34a0932
+/agent-note-domain-bound-excel-data-routing/problem:
+  en: ed08acf9412e36ce
+  zh: 772bdebbfffbae19
+/agent-note-domain-bound-excel-data-routing/decision:
+  en: 7edb446f14ba088b
+  zh: 5617c2a2b3d79e1c
+/agent-note-domain-bound-excel-data-routing/alternatives-considered:
+  en: 14486c9eecffdaf4
+  zh: 43467d6aca322bc2
+/agent-note-domain-bound-excel-data-routing/consequences:
+  en: 2c65dae475b9bc1a
+  zh: a6cb9aa5004e4cdd

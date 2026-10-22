@@ -3,6 +3,7 @@ import { isSystemDomain } from '../../names.ts'
 
 /** G1brain operations that require write access to the bound resources. */
 export const MUTATING_TOOLS = new Set([
+  'g1brain_fill_table_headers',
   'g1brain_create_document_library', 'g1brain_upload_selected_files',
   'g1brain_submit_document_task', 'g1brain_cancel_document_task',
   'g1brain_create_ontology_collection', 'g1brain_create_ontology_domain',

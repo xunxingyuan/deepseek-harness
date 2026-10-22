@@ -1,10 +1,31 @@
 import { describe, expect, it, vi } from 'vitest'
-import { DEFAULT_G1BRAIN_DEV_BASE_URL, G1brainAuth, g1brainDevelopmentHostEnvironment } from '../src/g1brain-auth.ts'
+import { DEFAULT_G1BRAIN_DEV_BASE_URL, DEFAULT_G1BRAIN_TABLE_DEV_BASE_URL, G1brainAuth, g1brainDevelopmentHostEnvironment } from '../src/g1brain-auth.ts'
 
 describe('G1brain desktop login', () => {
+  it('clears local sign-in without deleting connection or model settings', async () => {
+    const auth = new G1brainAuth(() => ({}))
+    await auth.login('admin', 'fixture-password')
+    expect(auth.signedIn).toBe(true)
+    auth.signOut()
+    expect(auth.signedIn).toBe(false)
+    expect(await auth.login('second', 'fixture-password')).toEqual({ ok: true, username: 'second' })
+  })
+
+  it('does not restore OAuth credentials when an old response arrives after sign-out', async () => {
+    const response = Promise.withResolvers<Response>()
+    const auth = new G1brainAuth(() => ({ G1BRAIN_AUTH_MODE: 'oauth', G1BRAIN_CLIENT_SECRET: 'fixture-secret' }),
+      async (_input, init) => { expect(init?.redirect).toBe('error'); return response.promise })
+    const login = auth.login('admin', 'fixture-password')
+    auth.signOut()
+    response.resolve(Response.json({ access_token: 'stale-token', expires_in: 3600 }))
+    expect(await login).toEqual({ ok: false, reason: 'unavailable' })
+    expect(auth.signedIn).toBe(false)
+  })
+
   it('connects the unpackaged development Host with the existing G1brain development API identity', () => {
     expect(g1brainDevelopmentHostEnvironment({}, true, 'local-dev')).toEqual({
       G1BRAIN_BASE_URL: DEFAULT_G1BRAIN_DEV_BASE_URL,
+      G1BRAIN_TABLE_BASE_URL: DEFAULT_G1BRAIN_TABLE_DEV_BASE_URL,
       G1BRAIN_LOCAL_USER_ID: 'developer',
       G1BRAIN_LOCAL_CLIENT_ID: 'g1brain-web',
       G1BRAIN_ALLOW_LOCAL_DEV: '1',
@@ -12,6 +33,8 @@ describe('G1brain desktop login', () => {
     })
     expect(g1brainDevelopmentHostEnvironment({ G1BRAIN_BASE_URL: 'http://127.0.0.1:9000' }, true, 'local-dev').G1BRAIN_BASE_URL)
       .toBe('http://127.0.0.1:9000')
+    expect(g1brainDevelopmentHostEnvironment({ G1BRAIN_TABLE_BASE_URL: 'http://127.0.0.1:8091' }, true, 'local-dev').G1BRAIN_TABLE_BASE_URL)
+      .toBe('http://127.0.0.1:8091')
     expect(g1brainDevelopmentHostEnvironment({}, false, 'local-dev')).toEqual({})
     expect(g1brainDevelopmentHostEnvironment({}, true, 'oauth')).toEqual({})
   })
@@ -22,6 +45,7 @@ describe('G1brain desktop login', () => {
     expect(await auth.login('admin', 'fixture-password')).toEqual({ ok: true, username: 'admin' })
     expect(g1brainDevelopmentHostEnvironment({}, false, auth.mode, manifest)).toEqual({
       G1BRAIN_BASE_URL: DEFAULT_G1BRAIN_DEV_BASE_URL,
+      G1BRAIN_TABLE_BASE_URL: DEFAULT_G1BRAIN_TABLE_DEV_BASE_URL,
       G1BRAIN_LOCAL_USER_ID: 'developer',
       G1BRAIN_LOCAL_CLIENT_ID: 'g1brain-web',
       G1BRAIN_ALLOW_LOCAL_DEV: '1',

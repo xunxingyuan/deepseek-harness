@@ -22,6 +22,7 @@
       name: '@deepseek-ai/dsh-g1brain-integration'
       config:
         baseUrl: !!js process.env.G1BRAIN_TEST_BASE_URL
+        tableBaseUrl: !!js process.env.G1BRAIN_TEST_TABLE_URL || ''
         clientId: 'g1brain-web'
         tenantId: '000000'
         timeoutMs: 5000

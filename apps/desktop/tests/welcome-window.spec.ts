@@ -40,6 +40,8 @@ function createWindow() {
 beforeEach(() => { electron.create.mockReset(); electron.handlers.clear() })
 
 const operations = {
+  readConnections: async () => ({ baseUrl: 'http://server.test', tableBaseUrl: '' }),
+  saveConnections: async () => ({ ok: false as const, reason: 'busy' as const }),
   loginG1brain: async () => ({ ok: true as const, username: 'admin' }),
   g1brainMode: async () => 'local-dev' as const,
   analyticsEnabled: async () => true,
@@ -120,7 +122,7 @@ describe('desktop welcome window', () => {
     expect(await login(own, { username: 'admin', password: 'test' })).toEqual({ ok: true, username: 'admin' })
     expect(loginG1brain).toHaveBeenCalledExactlyOnceWith({ username: 'admin', password: 'test' })
     expect(await electron.handlers.get(WELCOME_IPC.g1brainMode)!(own)).toBe('local-dev')
-    expect(electron.handlers.size).toBe(4)
+    expect(electron.handlers.size).toBe(6)
     window.once.mock.calls[0]![1]()
     expect(electron.handlers.size).toBe(0)
   })
@@ -161,6 +163,21 @@ describe('desktop welcome window', () => {
     expect(previousLogin).not.toHaveBeenCalled()
     current.once.mock.calls[0]![1]()
     expect(electron.handlers.size).toBe(0)
+  })
+
+  it('validates and isolates connection preferences at the native window boundary', async () => {
+    const window = createWindow()
+    electron.create.mockReturnValue(window)
+    const saveConnections = vi.fn(operations.saveConnections)
+    await openWelcomeWindow(resolveDesktopLocale('en'), { ...operations, saveConnections })
+    const own = { sender: window.webContents, senderFrame: window.webContents.mainFrame }
+    const save = electron.handlers.get(WELCOME_IPC.connectionsSave)!
+    await expect(save({ ...own, senderFrame: {} }, {})).rejects.toThrow('unowned frame')
+    expect(await save(own, { baseUrl: 'http://secret@server.test', tableBaseUrl: '' })).toEqual({ ok: false, reason: 'invalid-address' })
+    expect(saveConnections).not.toHaveBeenCalled()
+    expect(await save(own, { baseUrl: 'http://server.test/', tableBaseUrl: '' })).toEqual({ ok: false, reason: 'busy' })
+    expect(saveConnections).toHaveBeenCalledExactlyOnceWith({ baseUrl: 'http://server.test', tableBaseUrl: '' })
+    expect(await electron.handlers.get(WELCOME_IPC.connectionsRead)!(own)).toEqual({ baseUrl: 'http://server.test', tableBaseUrl: '' })
   })
 
   it('shows the entry after logout only without a separately configured API key', () => {

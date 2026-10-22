@@ -5,6 +5,7 @@ import { fileURLToPath } from 'node:url'
 import { app, BrowserWindow, ipcMain, type BrowserWindowConstructorOptions, type IpcMainInvokeEvent } from 'electron'
 import type { DesktopLocale } from './locale.ts'
 import { WELCOME_IPC, type WelcomeOperations } from './welcome-api.ts'
+import { parseG1brainConnections } from './g1brain-connections.ts'
 
 /**
  * Resolve the fixed-size welcome window's native material and controls.
@@ -66,6 +67,7 @@ export async function openWelcomeWindow(locale: DesktopLocale, operations: Welco
     for (const channel of [
       WELCOME_IPC.g1brainLogin,
       WELCOME_IPC.g1brainMode,
+      WELCOME_IPC.connectionsRead, WELCOME_IPC.connectionsSave,
       WELCOME_IPC.analyticsEnabled, WELCOME_IPC.analytics,
     ]) {
       ipcMain.removeHandler(channel)
@@ -93,6 +95,14 @@ export async function openWelcomeWindow(locale: DesktopLocale, operations: Welco
     } else throw new Error('desktop welcome: invalid analytics event')
   })
   ipcMain.handle(WELCOME_IPC.g1brainMode, async (event) => { assertSender(event); return operations.g1brainMode() })
+  ipcMain.handle(WELCOME_IPC.connectionsRead, async (event) => { assertSender(event); return operations.readConnections() })
+  ipcMain.handle(WELCOME_IPC.connectionsSave, async (event, input: unknown) => {
+    assertSender(event)
+    let settings: ReturnType<typeof parseG1brainConnections>
+    try { settings = parseG1brainConnections(input) }
+    catch (_invalidAddress: unknown) { return { ok: false, reason: 'invalid-address' } }
+    return operations.saveConnections(settings)
+  })
   ipcMain.handle(WELCOME_IPC.g1brainLogin, async (event, input: unknown) => {
     assertSender(event)
     if (typeof input !== 'object' || input === null || Array.isArray(input)

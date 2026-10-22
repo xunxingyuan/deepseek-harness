@@ -12,6 +12,7 @@ type Catalog = {
   readonly ontologies: readonly G1brainCatalogItem[]
   readonly libraries: readonly G1brainCatalogItem[]
   readonly error?: boolean
+  readonly tableConfigured?: boolean
 }
 
 function catalogLabel(item: G1brainCatalogItem): string {
@@ -100,7 +101,7 @@ export function G1brainHome({ t, loadCatalog, loadDomains, pickDirectory, openSe
   const [newDomain, setNewDomain] = useState('')
   const [existingDomain, setExistingDomain] = useState('')
   const [domainCatalog, setDomainCatalog] = useState<{ collection: string; items: readonly G1brainCatalogItem[]; state: 'loading' | 'ready' | 'error' }>({ collection: '', items: [], state: 'ready' })
-  const [libraryMode, setLibraryMode] = useState<'new' | 'existing'>('new')
+  const [libraryMode, setLibraryMode] = useState<'new' | 'existing' | 'none'>('new')
   const [libraryName, setLibraryName] = useState('')
   const [libraryExisting, setLibraryExisting] = useState('')
   const [directory, setDirectory] = useState('')
@@ -121,17 +122,20 @@ export function G1brainHome({ t, loadCatalog, loadDomains, pickDirectory, openSe
   const domainLoading = !!ontologyExisting && (domainCatalog.collection !== ontologyExisting || domainCatalog.state === 'loading')
   const target = mode === 'new' ? ontologyName.trim() : ontologyExisting
   const domain = mode === 'new' ? newDomain.trim() : existingDomain
-  const library = libraryMode === 'new' ? libraryName.trim() : libraryExisting
+  const library = libraryMode === 'new' ? libraryName.trim() : libraryMode === 'existing' ? libraryExisting : ''
   const targetLabel = mode === 'new' ? target
     : catalog?.ontologies.find(item => item.name === target)?.displayName?.trim() || target
   const domainLabel = mode === 'new' ? domain
     : domains.find(item => item.name === domain)?.displayName?.trim() || domain
+  const librarySummary = libraryMode === 'none' ? t('libraryNone') : library
+    ? t(libraryMode === 'new' ? 'summaryLibraryNew' : 'summaryLibraryExisting', { name: library }) : t('summaryPending')
   const missing = [
     ...(!target || (mode === 'optimize' && (!existingAvailable || !catalog.ontologies.some(item => item.name === target))) ? [t(mode === 'new' ? 'needOntologyName' : 'needOntology')] : []),
     ...(mode === 'new' ? !domain ? [t('needDomainName')] : []
       : domainLoading ? [t('domainsLoading')] : domainError ? [t('domainError')]
         : !domains.some(item => item.name === domain) ? [t(domains.length === 0 && ontologyExisting ? 'noBusinessDomains' : 'needDomain')] : []),
-    ...(!library || (libraryMode === 'existing' && (!existingAvailable || !catalog.libraries.some(item => item.name === library))) ? [t(libraryMode === 'new' ? 'needLibraryName' : 'needLibrary')] : []),
+    ...(libraryMode === 'none' ? catalog?.tableConfigured ? [] : [t('tableServiceRequired')]
+      : !library || (libraryMode === 'existing' && (!existingAvailable || !catalog.libraries.some(item => item.name === library))) ? [t(libraryMode === 'new' ? 'needLibraryName' : 'needLibrary')] : []),
     ...(!directory.trim() ? [t('needDirectory')] : []),
   ]
   const ready = missing.length === 0 && !busy
@@ -168,7 +172,8 @@ export function G1brainHome({ t, loadCatalog, loadDomains, pickDirectory, openSe
     const prompt = [
       mode === 'new' ? t('promptNew', { name: target }) : t('promptOptimize', { name: target }),
       t('promptDomain', { name: domain }),
-      libraryMode === 'new' ? t('promptLibraryNew', { name: library }) : t('promptLibraryExisting', { name: library }),
+      libraryMode === 'none' ? t('promptLibraryNone')
+        : libraryMode === 'new' ? t('promptLibraryNew', { name: library }) : t('promptLibraryExisting', { name: library }),
       t('promptSafety'),
       t('promptProcessing'),
       t('promptLanguage'),
@@ -181,7 +186,7 @@ export function G1brainHome({ t, loadCatalog, loadDomains, pickDirectory, openSe
           ? { createOntologyCollectionName: target, createOntologyCollectionDisplayName: target,
             createDomainName: domain, createDomainDisplayName: domain }
           : { ontologyCollectionName: target, domainName: domain }),
-        ...(libraryMode === 'new' ? { createDocumentLibraryName: library } : { documentLibraryName: library }),
+        ...(libraryMode === 'none' ? {} : libraryMode === 'new' ? { createDocumentLibraryName: library } : { documentLibraryName: library }),
       }
       await openSession({ target: binding, prompt })
     } catch (error) {
@@ -249,9 +254,11 @@ export function G1brainHome({ t, loadCatalog, loadDomains, pickDirectory, openSe
             <div className={css.segment} role="group" aria-label={t('sectionLibrary')}>
               <button type="button" aria-pressed={libraryMode === 'new'} onClick={() => { setLibraryMode('new') }}>{t('libraryNew')}</button>
               <button type="button" aria-pressed={libraryMode === 'existing'} onClick={() => { setLibraryMode('existing') }}>{t('libraryExisting')}</button>
+              {catalog?.tableConfigured && <button type="button" aria-pressed={libraryMode === 'none'} onClick={() => { setLibraryMode('none') }}>{t('libraryNone')}</button>}
             </div>
-            {libraryMode === 'new' ? <label className={css.field}>{t('libraryName')}<Input value={libraryName} onChange={(event) => { setLibraryName(event.target.value) }} placeholder={t('libraryNamePlaceholder')} /></label>
-              : <div><label className={css.field}>{t('libraryExistingLabel')}<select disabled={!existingAvailable} value={libraryExisting} onChange={(event) => { setLibraryExisting(event.target.value) }}><option value="">{t('libraryExistingPlaceholder')}</option>{catalog?.libraries.map(item => <option key={item.name} value={item.name}>{catalogLabel(item)}</option>)}</select></label>{!existingAvailable && <small className={css.hint}>{t('unavailable')}</small>}</div>}
+            {libraryMode === 'none' ? <p className={css.hint}>{t('libraryNoneHelp')}</p>
+              : libraryMode === 'new' ? <label className={css.field}>{t('libraryName')}<Input value={libraryName} onChange={(event) => { setLibraryName(event.target.value) }} placeholder={t('libraryNamePlaceholder')} /></label>
+                : <div><label className={css.field}>{t('libraryExistingLabel')}<select disabled={!existingAvailable} value={libraryExisting} onChange={(event) => { setLibraryExisting(event.target.value) }}><option value="">{t('libraryExistingPlaceholder')}</option>{catalog?.libraries.map(item => <option key={item.name} value={item.name}>{catalogLabel(item)}</option>)}</select></label>{!existingAvailable && <small className={css.hint}>{t('unavailable')}</small>}</div>}
           </section>
 
           <section className={css.card} aria-labelledby="g1brain-directory">
@@ -264,7 +271,7 @@ export function G1brainHome({ t, loadCatalog, loadDomains, pickDirectory, openSe
         </div>
 
         <aside className={css.footer}>
-          <div><strong>{t('summary')}</strong><p>{target ? mode === 'new' ? t('summaryNew', { name: targetLabel }) : t('summaryOptimize', { name: targetLabel }) : t('summaryPending')} · {domain ? t('summaryDomain', { name: domainLabel }) : t('summaryPending')} · {library ? libraryMode === 'new' ? t('summaryLibraryNew', { name: library }) : t('summaryLibraryExisting', { name: library }) : t('summaryPending')} · {directory ? t('summaryDirectory', { name: directory }) : t('summaryPending')}</p><small>{t('draftNotice')}</small></div>
+          <div><strong>{t('summary')}</strong><p>{target ? mode === 'new' ? t('summaryNew', { name: targetLabel }) : t('summaryOptimize', { name: targetLabel }) : t('summaryPending')} · {domain ? t('summaryDomain', { name: domainLabel }) : t('summaryPending')} · {librarySummary} · {directory ? t('summaryDirectory', { name: directory }) : t('summaryPending')}</p><small>{t('draftNotice')}</small></div>
           <div className={css.footerActions}><p className={css.validation} id="g1brain-missing" role="status">{missing.join('；')}</p><Button variant="primary" disabled={!ready} aria-describedby="g1brain-missing" onClick={() => { void proceed() }}>{busy ? t('proceeding') : t('proceed')}</Button></div>
         </aside>
         {startError !== null && <p className={css.error} role="alert">{t(startError === 'directory' ? 'startDirectoryError'

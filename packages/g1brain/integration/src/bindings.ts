@@ -47,8 +47,8 @@ function targetOf(value: G1brainSessionTarget): G1brainSessionTarget {
     || (value.mode === 'update-ontology' && (!ontologyCollectionName || createOntologyCollectionName))) {
     throw new Error('G1brain ontology target does not match the selected mode')
   }
-  if (Boolean(documentLibraryName) === Boolean(createDocumentLibraryName)) {
-    throw new Error('Select exactly one existing or new G1brain document library')
+  if (documentLibraryName && createDocumentLibraryName) {
+    throw new Error('Select at most one existing or new G1brain document library')
   }
   if ((value.mode === 'new-ontology' && (!createDomainName || domainName))
     || (value.mode === 'update-ontology' && (!domainName || createDomainName))) {

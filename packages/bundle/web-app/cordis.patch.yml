@@ -126,6 +126,9 @@
         clientId: !!js process.env.G1BRAIN_CLIENT_ID
         tenantId: !!js process.env.G1BRAIN_TENANT_ID
         timeoutMs: !!js process.env.G1BRAIN_TIMEOUT_MS && Number(process.env.G1BRAIN_TIMEOUT_MS)
+        tableBaseUrl: !!js process.env.G1BRAIN_TABLE_BASE_URL
+        tableTimeoutMs: !!js process.env.G1BRAIN_TABLE_TIMEOUT_MS && Number(process.env.G1BRAIN_TABLE_TIMEOUT_MS)
+        tableMaxUploadBytes: !!js process.env.G1BRAIN_TABLE_MAX_UPLOAD_BYTES && Number(process.env.G1BRAIN_TABLE_MAX_UPLOAD_BYTES)
 
     # Session commands, cold reads, and live control over Typert Remote.
     - id: session-controller

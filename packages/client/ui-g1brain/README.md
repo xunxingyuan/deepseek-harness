@@ -29,10 +29,14 @@ The panel waits for the Session reference to be ready before preparing the draft
 
 New ontology and domain inputs are display names; the Host resolves their API identifiers once and adds the saved mapping to the draft. Improvement excludes system schema/shared domains and automatically selects a sole business domain. Multiple business domains require an explicit selection. The Open action names missing fields, loading failures, or a collection with no business domain; it becomes available after valid ontology, domain, library, and folder selections. Switching collections invalidates the previous domain immediately and ignores late replies for another collection.
 
+When the Host reports a configured table service, the library selector also offers **Table data only**. This omits both vector-library targets from the Session binding. The brief requests per-sheet Excel preflight and completed table-import status; document content still requires a vector library before any upload. If table configuration becomes unavailable, a table-only preparation cannot proceed. The [Host integration](../../g1brain/integration/README.md#excel-data-routing) owns classification, import safety, and SQL scope.
+
 <a id="understand-the-package"></a>
 ## Understand the package
 
 The panel implementation is in `src/client/G1brainHome.tsx`. Resource catalogs and Session binding come from the Host-side G1brain integration; the browser plugin does not hold the service token.
+
+In native Desktop, the sidebar footer also offers **Sign out** from every panel or Session. The browser invokes only the main-process sign-out action; it cannot edit service addresses or clear credentials itself. Native confirmation and connection replacement are owned by [Desktop](../../../apps/desktop/README.md). Ordinary Web does not register this action.
 
 <a id="further-reading"></a>
 ## Further reading

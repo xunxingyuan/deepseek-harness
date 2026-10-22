@@ -41,7 +41,7 @@ describe('G1brain desktop integration', () => {
     process.env.G1BRAIN_LOCAL_USER_ID = 'developer'
     process.env.G1BRAIN_LOCAL_CLIENT_ID = 'g1brain-web'
     const { ctx, service } = await integration('http://127.0.0.1:18203/')
-    expect(service.status()).toEqual({ configured: false, mode: 'local-dev' })
+    expect(service.status()).toEqual({ configured: false, tableConfigured: false, mode: 'local-dev' })
     expect(ctx.tools.schemas().map(tool => tool.name).filter(name => name.startsWith('g1brain_'))).toEqual([])
     await expect(service.listOntologyCollections()).rejects.toThrow('not configured')
   })
@@ -60,7 +60,7 @@ describe('G1brain desktop integration', () => {
     })
     vi.stubGlobal('fetch', fetcher)
     const { ctx, service } = await integration('http://127.0.0.1:18203/')
-    expect(service.status()).toEqual({ configured: true, mode: 'local-dev' })
+    expect(service.status()).toEqual({ configured: true, tableConfigured: false, mode: 'local-dev' })
     const globalTools = ctx.tools.schemas().map(tool => tool.name).filter(name => name.startsWith('g1brain_'))
     expect(globalTools).toHaveLength(16)
     expect(globalTools).toContain('g1brain_list_ontology_collections')
@@ -141,7 +141,7 @@ describe('G1brain desktop integration', () => {
     })
     vi.stubGlobal('fetch', fetcher)
     const { service } = await integration('http://127.0.0.1:18203/')
-    expect(service.status()).toEqual({ configured: true, mode: 'oauth' })
+    expect(service.status()).toEqual({ configured: true, tableConfigured: false, mode: 'oauth' })
     expect(await service.listOntologyCollections()).toEqual([])
   })
 })

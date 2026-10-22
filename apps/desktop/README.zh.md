@@ -4,6 +4,12 @@
 
 ## G1brain 分支登录
 
+登录页的「连接设置」可修改 G1brain 服务根地址及可选的 Excel 数据服务根地址。桌面端接受不含账号密码、查询参数或片段的 HTTP(S) 地址，仅将地址保存到 Electron 用户数据目录下的 `g1brain-connections.json`。已保存的设置优先于环境变量地址和开发默认值；Excel 地址留空会明确关闭表格分流。保存后会在登录前重建宿主连接，不改变模型配置。保存只校验地址格式，不验证服务可用性或身份；开发登录仍不校验密码。在其他服务器选择目标时应准备新的 G1brain 会话，已有会话的目标名称不会被迁移。
+
+工作区侧栏增加「退出登录」，原生应用菜单也提供该操作。原生确认会提醒正在运行的工作将中断。退出会清除进程内登录状态、销毁旧工作区页面、停止并替换宿主，然后返回登录页。本地会话、文件、模型密钥和连接设置仍保留在磁盘上。这是桌面本地退出，不代表服务端令牌吊销，也不隔离共享的开发后端身份。
+
+开发和带有明确未签名测试标记的宿主还默认设置 `G1BRAIN_TABLE_BASE_URL=http://192.168.100.113:8090`，显式值可覆盖它。这会启用[按领域绑定的 Excel 分流](../../packages/g1brain/integration/README.zh.md#excel-data-routing)和仅表格准备模式。签名/OAuth 部署不会自动获得表格服务地址，须明确配置。
+
 本分支的原生欢迎窗口要求输入 G1brain 用户名和密码。`G1BRAIN_AUTH_MODE` 默认是 `local-dev`：两项均须填写，但密码不会发送到 G1brain 服务端，也不会由服务端校验；登录状态仅持续到桌面进程退出。欢迎窗口没有官方账号登录或 API Key 入口，设置页也不显示官方账号栏目；模型密钥仍可在工作区配置。日后启用真实 OAuth 校验时，设置 `G1BRAIN_AUTH_MODE=oauth` 和 `G1BRAIN_CLIENT_SECRET`；主进程还支持 `G1BRAIN_BASE_URL`、`G1BRAIN_CLIENT_ID`、`G1BRAIN_TENANT_ID` 和 `G1BRAIN_PUBLIC_KEY`。登录后的欢迎页渲染进程不会接收密码或客户端密钥。
 
 登录后，桌面版默认打开 [G1brain 工作台](../../packages/client/ui-g1brain/README.zh.md)，而不是空会话。桌面配置会启用 [G1brain 宿主集成](../../packages/g1brain/integration/README.zh.md)，普通会话也可使用只读发现与检索工具。本地开发桌面版和未签名测试安装包默认连接原有开发接口 `http://192.168.100.113:19091`，以 `developer` / `g1brain-web` 测试身份访问；三项均可通过环境变量覆盖。未签名安装包在应用清单中明确写入 `g1brainDevelopmentConnection: true`，使安装后的宿主获得这些默认值。这不会校验输入的用户名和密码。签名安装包与 OAuth 模式不会自动获得开发凭据。工作台将所选目标和目录绑定到新建 Harness 会话。非删除 G1brain 操作在此范围内无需额外确认；删除和替换导入须逐次取得 Harness 审批。进入会话本身不会写入 G1brain。

@@ -44,7 +44,7 @@ describe('G1brain Session bindings', () => {
     mkdirSync(other)
     await expect(store.bind(session, { ...target, folderPath: other })).rejects.toThrow('differs')
     await expect(store.bind(session, { ...target, ontologyCollectionName: '已有集合' })).rejects.toThrow('mode')
-    await expect(store.bind(session, { ...target, documentLibraryName: '已有文档库' })).rejects.toThrow('exactly one')
+    await expect(store.bind(session, { ...target, documentLibraryName: '已有文档库' })).rejects.toThrow('at most one')
     await expect(store.bind(session, { mode: 'new-ontology', folderPath: target.folderPath,
       createOntologyCollectionName: '新本体', createDocumentLibraryName: '新文档库' })).rejects.toThrow('domain target')
   })

@@ -29,6 +29,10 @@ const state = vi.hoisted(() => ({
   moveTopWorkspace: vi.fn(),
   openDevTools: vi.fn(),
   closeWelcome: vi.fn(),
+  destroyWorkspace: vi.fn(),
+  confirm: vi.fn(async () => ({ response: 0, checkboxChecked: false })),
+  savedConnections: undefined as { baseUrl: string; tableBaseUrl: string } | undefined,
+  hostEnvironments: [] as NodeJS.ProcessEnv[],
   welcomeLocale: undefined as DesktopLocale | undefined,
   preference: 'zh',
   hasApiKey: false,
@@ -74,7 +78,9 @@ vi.mock('electron', () => ({
     static getAllWindows() { return [] }
     once(name: string, callback: () => void) { if (name === 'ready-to-show') this.ready = callback; return this }
     on() { return this }
-    isDestroyed() { return false }
+    private destroyed = false
+    isDestroyed() { return this.destroyed }
+    destroy() { this.destroyed = true; state.destroyWorkspace() }
     isMinimized() { return false }
     restore = vi.fn()
     focus = state.focusWorkspace
@@ -101,7 +107,13 @@ vi.mock('electron', () => ({
 // The Windows tray relabels through Menu as well; keep the menu call counts below platform-neutral.
 vi.mock('../src/tray.ts', () => ({ DesktopTray: class { relabel() {} dispose() {} } }))
 
-vi.mock('../src/paths.ts', () => ({ resolveDesktopPaths: () => ({ profile: '/profile' }) }))
+vi.mock('../src/paths.ts', async importOriginal => ({
+  ...await importOriginal<typeof import('../src/paths.ts')>(), resolveDesktopPaths: () => ({ profile: '/profile' }),
+}))
+vi.mock('../src/g1brain-connections.ts', () => ({ G1brainConnectionStore: class {
+  async load() { return state.savedConnections }
+  async save(settings: { baseUrl: string; tableBaseUrl: string }) { state.savedConnections = settings }
+} }))
 vi.mock('../src/login-shell-environment.ts', async importOriginal => ({
   ...await importOriginal<typeof import('../src/login-shell-environment.ts')>(),
   readDesktopLoginShellEnvironment: async (base: NodeJS.ProcessEnv) => ({ environment: base, failures: [] }),
@@ -110,8 +122,12 @@ vi.mock('../src/project-manager.ts', () => ({ DesktopProjectManager: class {
   applyRelease = vi.fn(async () => {})
   canRecoverProfile = vi.fn(() => true)
 } }))
-vi.mock('../src/host-process.ts', () => ({
+vi.mock('../src/host-process.ts', async importOriginal => ({
+  ...await importOriginal<typeof import('../src/host-process.ts')>(),
   DesktopHostProcess: class {
+    constructor(_node: string, _runtime: string, _project: string, _port: unknown, environment: NodeJS.ProcessEnv) {
+      state.hostEnvironments.push(environment)
+    }
     start = state.startHost
     stop = state.stopHost
     fetch() {
@@ -147,6 +163,7 @@ vi.mock('node:fs/promises', async importOriginal => ({
 vi.mock('../src/update-dialog.ts', () => ({ DesktopUpdateDialog: class {
   constructor(_preload: string, locale: () => DesktopLocale) { state.dialogLocale = locale }
   dispose() {}
+  show = state.confirm
 } }))
 vi.mock('../src/update-coordinator.ts', () => ({ DesktopUpdateCoordinator: class {
   state = { phase: 'idle' }
@@ -177,6 +194,9 @@ it.each([false, true])('opens the G1brain welcome and enters after local login (
   state.preference = 'zh'
   state.hasApiKey = false
   state.operations = undefined
+  state.savedConnections = undefined
+  state.hostEnvironments.length = 0
+  state.confirm.mockResolvedValue({ response: 0, checkboxChecked: false })
   state.accountState.mockResolvedValue({ status: 'signed-out', attempt: null, links: { usageUrl: '', topUpUrl: '' } })
   if (updated) vi.stubGlobal('process', { ...process, platform: 'win32', argv: ['desktop', '--updated'] })
   vi.useFakeTimers()
@@ -262,5 +282,29 @@ it.each([false, true])('opens the G1brain welcome and enters after local login (
   await vi.advanceTimersByTimeAsync(0)
   expect(state.beforeWelcome).toHaveBeenCalledTimes(welcomeCount)
   expect(state.openDevTools).not.toHaveBeenCalled()
+
+  expect(await state.operations!.saveConnections({ baseUrl: 'http://new-server.test:19091', tableBaseUrl: '' }))
+    .toEqual({ ok: false, reason: 'busy' })
+  const signOut = state.handlers.get(DESKTOP_IPC.g1brainSignOut)!
+  expect(() => signOut({ ...event, senderFrame: { url: 'dsh-app://app/' } })).toThrow('unowned renderer')
+  state.confirm.mockResolvedValueOnce({ response: 1, checkboxChecked: false })
+  expect(await signOut(event)).toBe(false)
+  expect(state.stopHost).not.toHaveBeenCalled()
+  expect(await signOut(event)).toBe(true)
+  expect(state.beforeWelcome).toHaveBeenCalledTimes(welcomeCount + 1)
+  expect(state.destroyWorkspace).toHaveBeenCalledOnce()
+  expect(state.stopHost).toHaveBeenCalledOnce()
+  expect(state.startHost).toHaveBeenCalledTimes(2)
+  expect(() => signOut(event)).toThrow('unowned renderer')
+  const settings = { baseUrl: 'http://new-server.test:19091', tableBaseUrl: '' }
+  expect(await state.operations!.saveConnections(settings)).toEqual({ ok: true, settings })
+  expect(state.savedConnections).toEqual(settings)
+  expect(state.hostEnvironments.at(-1)).toMatchObject({ G1BRAIN_BASE_URL: settings.baseUrl, G1BRAIN_TABLE_BASE_URL: '' })
+  expect(state.startHost).toHaveBeenCalledTimes(3)
+  expect(await state.operations!.readConnections()).toEqual(settings)
+  expect(await state.operations!.loginG1brain({ username: 'second-user', password: 'development-password' }))
+    .toEqual({ ok: true, username: 'second-user' })
+  expect(state.closeWelcome).toHaveBeenCalledTimes(2)
+  expect(state.loadWorkspace).toHaveBeenCalledExactlyOnceWith('dsh-app://app/')
 
 })

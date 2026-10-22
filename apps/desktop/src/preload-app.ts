@@ -13,6 +13,7 @@ import { createDesktopBrowserBridge } from './preload-browser.ts'
 function createProductApi(): DshDesktopProductApi {
   return {
     protocolVersion: 1,
+    g1brain: { signOut: () => ipcRenderer.invoke(DESKTOP_IPC.g1brainSignOut) as Promise<boolean> },
     browser: createDesktopBrowserBridge(),
     deviceInfo: () => ipcRenderer.invoke(DESKTOP_IPC.deviceInfo) as Promise<string>,
     keyboard: {

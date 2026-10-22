@@ -1,0 +1,19 @@
+# Bilingual-pair consistency record for 2026-10-22-g1brain-desktop-connections.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write .agents/notes/implemented/feature/2026-10-22-g1brain-desktop-connections.md
+/agent-note-desktop-owned-g1brain-connections-and-sign-out:
+  en: 99ef73fa98536e53
+  zh: ff299e9fa82bdad7
+/agent-note-desktop-owned-g1brain-connections-and-sign-out/problem:
+  en: 87a9e77763f3dd05
+  zh: 2c07198b9442febf
+/agent-note-desktop-owned-g1brain-connections-and-sign-out/decision:
+  en: e00045c32878e173
+  zh: 1b8b05d978f8ea56
+/agent-note-desktop-owned-g1brain-connections-and-sign-out/alternatives-considered:
+  en: 47278f1d155bb93b
+  zh: 7e42361b84a759c4
+/agent-note-desktop-owned-g1brain-connections-and-sign-out/consequences:
+  en: 1d20c859be685271
+  zh: dd119d3a7d055e1a

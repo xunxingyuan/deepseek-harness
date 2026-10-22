@@ -12,6 +12,7 @@ import type {} from '@deepseek-ai/dsh-client-ui-workspace/client'
 import { G1brainHome, type G1brainHomeInjected } from './G1brainHome.tsx'
 import { G1brainBrandMark, G1brainBrandName } from './G1brainBrand.tsx'
 import { G1brainIcon } from './G1brainIcon.tsx'
+import { G1brainSignOut } from './G1brainSignOut.tsx'
 import { en, zh, type G1brainKey } from './locales.ts'
 import { prepareG1brainSession } from './preparation.ts'
 
@@ -34,10 +35,18 @@ export function apply(ctx: Context): void {
   const desktopPicker = (globalThis as typeof globalThis & {
     __DSH_DIRECTORY_PICKER__?: { pick(): Promise<string | null> }
   }).__DSH_DIRECTORY_PICKER__
+  const native = (globalThis as typeof globalThis & {
+    dshDesktop?: { g1brain?: { signOut(): Promise<boolean> } }
+  }).dshDesktop?.g1brain
+  if (native !== undefined) ctx.slots.inject('sidebar.footer.action', () => ctx.slots.register({
+    name: 'sidebar.footer.action', id: 'g1brain-sign-out', locale: 'g1brain',
+    inject: () => ({ signOut: () => native.signOut() }),
+  }, G1brainSignOut))
   const loadCatalog: G1brainHomeInjected['loadCatalog'] = async () => {
     const status = await ctx.remote.g1brain.status()
     if (!status.ok) throw new Error(status.error.message)
-    if (!status.value.configured) return { configured: false, mode: status.value.mode, ontologies: [], libraries: [] }
+    const tableConfigured = status.value.tableConfigured === true
+    if (!status.value.configured) return { configured: false, mode: status.value.mode, tableConfigured, ontologies: [], libraries: [] }
     try {
       const [ontologies, libraries] = await Promise.all([
         ctx.remote.g1brain.listOntologyCollections(),
@@ -45,9 +54,9 @@ export function apply(ctx: Context): void {
       ])
       if (!ontologies.ok) throw new Error(ontologies.error.message)
       if (!libraries.ok) throw new Error(libraries.error.message)
-      return { configured: true, mode: status.value.mode, ontologies: ontologies.value, libraries: libraries.value }
+      return { configured: true, mode: status.value.mode, tableConfigured, ontologies: ontologies.value, libraries: libraries.value }
     } catch (_error) {
-      return { configured: true, mode: status.value.mode, ontologies: [], libraries: [], error: true }
+      return { configured: true, mode: status.value.mode, tableConfigured, ontologies: [], libraries: [], error: true }
     }
   }
   const loadDomains: G1brainHomeInjected['loadDomains'] = async (collectionName) => {

@@ -11,6 +11,10 @@ import { Remote, TypertRemoteService } from '@deepseek-ai/dsh-typert-protocol'
 import z from '@deepseek-ai/schemastery'
 import { createBindingStore } from './bindings.ts'
 import { isSystemDomain } from './names.ts'
+import { TableClient } from './tables/client.ts'
+import { TableStore } from './tables/store.ts'
+import { MaterialRouter } from './tables/router.ts'
+import { createTableTools } from './tables/tools.ts'
 import { assertTaskScope, DELETION_TOOLS, MUTATING_TOOLS, requiresDeletionApproval, scopedSchema } from './legacy/bridge/policy.ts'
 import { openWorkspaceScope } from './legacy/bridge/scope.ts'
 import { createG1BrainTools } from './legacy/bridge/tools.ts'
@@ -51,7 +55,8 @@ const WORKFLOW_GUIDANCE = [
   'Use the available G1brain tools for ontology and document operations. Ordinary Sessions provide discovery and search; creation and updates require a G1brain build or improvement Session prepared with the selected ontology, domain, document library, and source folder.',
   'If write tools are absent, explain that this Session is read-only and direct the user to prepare a G1brain build or improvement Session. Do not interpret missing write tools as missing API credentials or ask the user to install another plugin.',
   'Before writing in a prepared Session, call g1brain_context and use its bound collection and domain API names for creation and all later references. Display names are labels only; never translate or regenerate bound identifiers. System domains such as _schema and _shared are not business write targets.',
-  'Use g1brain_read_selected_file to extract DOCX or Excel text and tables, not a raw text read of Office bytes. Upload tools extract UTF-8 Markdown before ingestion. Unsupported or encrypted files must be converted first; never upload garbled text as a successful extraction. Document uploads and processing tasks use the document library API name from the Session context, not the ontology collection name or a display name.',
+  'Use g1brain_read_selected_file to extract DOCX or Excel text and tables, not a raw text read of Office bytes. Document uploads extract UTF-8 Markdown before ingestion. Unsupported or encrypted files must be converted first; never upload garbled text as a successful extraction. Document uploads and processing tasks use the document library API name from the Session context, not the ontology collection name or a display name.',
+  'When g1brain_inspect_materials is available, inspect selected sources before importing. The upload tool routes regular Excel worksheets to the domain-bound table collection and explanatory sheets to the selected vector document library. Mixed workbooks are split by worksheet without changing the original. Only document uploads need MD/CHUNK tasks; table uploads return job IDs and require g1brain_get_table_imports to report completed. partial, failed, needs_input, and missing jobs are not success. Do not repeat an uncertain write. For table answers use g1brain_list_data_tables, g1brain_describe_data_table, and read-only SQL through g1brain_query_data_tables, not vector search arithmetic. Do not discard columns or invent missing header meanings. Same collection names alone do not authorize reusing another ontology domain’s table collection.',
   'In a prepared Session, inspect the sources and cite evidence. Execute requested creation, updates, uploads, and document processing within the bound resources without asking for extra confirmation. A request only for information or a plan is not a request to write data. Ask clarification questions only when the intended scope or business requirement is ambiguous.',
   'Deletion and replacement imports that may remove existing content require approval for each call. Set confirm=true for those calls and let Harness request approval; do not ask for a separate chat confirmation. Missing or rejected approval must prevent the deletion.',
 ].join('\n\n')
@@ -66,6 +71,12 @@ export interface Config {
   readonly tenantId: string
   /** Maximum duration of one catalog request in milliseconds. */
   readonly timeoutMs: number
+  /** Separate table-service root; empty disables Excel routing and preserves Markdown-only ingestion. */
+  readonly tableBaseUrl: string
+  /** Table HTTP/MCP request deadline, including upload acceptance. */
+  readonly tableTimeoutMs: number
+  /** Maximum generated XLSX bytes accepted by the table service. */
+  readonly tableMaxUploadBytes: number
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -112,6 +123,9 @@ export default class G1brainIntegration extends TypertRemoteService {
     clientId: z.string().default('lhzstp'),
     tenantId: z.string().default('000000'),
     timeoutMs: z.natural().min(1).default(15000),
+    tableBaseUrl: z.string().default(''),
+    tableTimeoutMs: z.natural().min(1).default(120000),
+    tableMaxUploadBytes: z.natural().min(1).default(25 * 1024 * 1024),
   })
 
   private readonly endpoint: URL | undefined
@@ -122,10 +136,13 @@ export default class G1brainIntegration extends TypertRemoteService {
   private readonly attaching = new WeakMap<Agent, Promise<void>>()
   private readonly writesEnabled: boolean
   private readonly client: G1BrainClient | undefined
+  private readonly tables: TableClient | undefined
 
   constructor(ctx: Context, private readonly config: Config) {
     super(ctx, 'g1brain')
     const env = process.env
+    this.tables = config.tableBaseUrl.trim() ? new TableClient({ baseUrl: config.tableBaseUrl.trim(),
+      timeoutMs: config.tableTimeoutMs, maxUploadBytes: config.tableMaxUploadBytes }) : undefined
     this.mode = env.G1BRAIN_AUTH_MODE === 'oauth' ? 'oauth' : 'local-dev'
     this.writesEnabled = this.mode === 'oauth' || env.G1BRAIN_ALLOW_DEV_WRITES === '1'
     if (this.mode === 'oauth') {
@@ -233,6 +250,9 @@ export default class G1brainIntegration extends TypertRemoteService {
   async bindSession(request: G1brainBindRequest): Promise<G1brainBindReceipt> {
     const session = this.ctx.sessions.get(request.sessionId)
     if (session === undefined) throw new Error('G1brain Session does not exist')
+    if (!request.target.documentLibraryName && !request.target.createDocumentLibraryName && (!this.tables || !this.client)) {
+      throw new Error('不选择向量文档库时必须先配置并启用表格服务')
+    }
     const target = await this.bindings.bind(session, request.target)
     const agent = this.ctx.agents.get(request.sessionId)
     if (agent !== undefined) await this.attachAgent(agent)
@@ -254,9 +274,22 @@ export default class G1brainIntegration extends TypertRemoteService {
     if (session === undefined || session.header.parentSession !== undefined || this.client === undefined) return
     const target = await this.bindings.load(session)
     if (target === undefined) return
+    if (!target.documentLibraryName && !target.createDocumentLibraryName && this.tables === undefined) {
+      throw new Error('仅表格会话需要恢复表格服务配置，不能退回文档上传流程')
+    }
     const scope = await openWorkspaceScope(target.folderPath)
     const task: PreparedTask = { ...target, instruction: '' }
-    const prepared = createG1BrainTools({ client: this.client, scope, task })
+    const collectionName = target.ontologyCollectionName ?? target.createOntologyCollectionName ?? ''
+    const domainName = target.domainName ?? target.createDomainName ?? ''
+    const router = this.tables === undefined ? undefined : new MaterialRouter({ scope, target, documents: this.client, tables: this.tables,
+      store: new TableStore(join(resolveDshHome(), 'g1brain', 'tables'), JSON.stringify({ g1brainUrl: this.endpoint?.href,
+        tenantId: this.config.tenantId, collectionName, domainName, tableUrl: this.tables.baseUrl })),
+      domainDisplayName: async () => target.createDomainDisplayName
+        ?? (await this.listOntologyDomains(collectionName)).find(item => item.name === domainName)?.displayName ?? domainName,
+    })
+    const legacy = createG1BrainTools({ client: this.client, scope, task,
+      ...(router ? { uploadMaterials: (paths: readonly string[], signal?: AbortSignal) => router.upload(paths, signal) } : {}) })
+    const prepared = [...legacy, ...(router ? createTableTools(router) : [])]
       .filter(tool => !AGENT_MANAGEMENT_TOOLS.has(tool.name))
       .filter(tool => this.writesEnabled || !MUTATING_TOOLS.has(tool.name))
       .map((tool) => {
@@ -343,7 +376,8 @@ export default class G1brainIntegration extends TypertRemoteService {
    */
   @Remote
   status(): G1brainStatus {
-    return { configured: this.endpoint !== undefined, mode: this.mode }
+    return { configured: this.endpoint !== undefined, mode: this.mode,
+      tableConfigured: this.tables !== undefined && this.client !== undefined }
   }
 
   /** Read ontology collection names; fail explicitly without API credentials.

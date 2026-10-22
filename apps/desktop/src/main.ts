@@ -41,6 +41,7 @@ import { openWelcomeWindow } from './welcome-window.ts'
 import { needsWelcome } from './welcome-api.ts'
 import { connectDesktopWelcome, type DesktopWelcomeBackend } from './welcome-backend.ts'
 import { G1brainAuth, g1brainDevelopmentHostEnvironment } from './g1brain-auth.ts'
+import { G1brainConnectionStore } from './g1brain-connections.ts'
 import { DesktopUpdateJournal } from './update-journal.ts'
 import { DesktopUpdatePreparationError } from './update-error.ts'
 import { DesktopUpdateSchedule, resolveDesktopUpdateScheduleConfig } from './update-schedule.ts'
@@ -329,7 +330,15 @@ async function main(): Promise<void> {
     () => hostEnvironment,
     (input, init) => net.fetch(input instanceof URL ? input.toString() : input, init),
   )
-  const prepareHostEnvironment = async (): Promise<void> => { hostEnvironment = await loginShell }
+  const connectionStore = new G1brainConnectionStore(join(app.getPath('userData'), 'g1brain-connections.json'))
+  const prepareHostEnvironment = async (): Promise<void> => {
+    const inherited = await loginShell
+    const saved = await connectionStore.load()
+    const mode = inherited.G1BRAIN_AUTH_MODE === 'oauth' ? 'oauth' : 'local-dev'
+    hostEnvironment = { ...inherited, ...g1brainDevelopmentHostEnvironment(inherited, development, mode, manifest),
+      ...(saved ? { G1BRAIN_BASE_URL: saved.baseUrl, G1BRAIN_TABLE_BASE_URL: saved.tableBaseUrl } : {}) }
+  }
+  let g1brainOperation: 'idle' | 'login' | 'connections' | 'logout' = 'idle'
   let quitting = false
   let startup: Promise<void> | undefined
   let workspaceRecovery: Promise<void> | undefined
@@ -434,7 +443,6 @@ async function main(): Promise<void> {
     const host = new DesktopHostProcess(resources.node, resources.dsh, activeProject,
       hostInspectPort, {
         ...hostEnvironment,
-        ...g1brainDevelopmentHostEnvironment(hostEnvironment, development, g1brainAuth.mode, manifest),
         DSH_CLIENT_VERSION: desktopClientVersion(),
       }, onFailure,
       primaryRuntime,
@@ -918,6 +926,8 @@ async function main(): Promise<void> {
       : { label: currentDesktopLocale().messages.aboutMenu, role: 'about' },
     { type: 'separator' },
     { label: currentDesktopLocale().messages.checkUpdatesMenu, click: () => { void openUpdatePrompt(true) } },
+    { label: currentDesktopLocale().messages.g1brainSignOut, enabled: enteredWorkspace && g1brainAuth.signedIn,
+      click: () => { void signOutG1brain().catch((error: unknown) => { console.error(error) }) } },
     ...process.platform === 'darwin' || process.platform === 'win32'
       ? [{ label: currentDesktopLocale().messages.cliCommandMenu, click: () => { void commandManager.show() } }] : [],
     ...development ? [
@@ -1083,6 +1093,7 @@ async function main(): Promise<void> {
     if (activate) window.show()
     else window.showInactive()
     enteredWorkspace = true
+    refreshApplicationMenu()
     if (welcomeWindow !== undefined) {
       welcomeWindow.close()
       window.webContents.send(DESKTOP_IPC.enterWorkspace)
@@ -1098,6 +1109,22 @@ async function main(): Promise<void> {
     }
   }
   let openingWelcome: Promise<void> | undefined
+  const restartG1brainHost = async (): Promise<void> => {
+    const previous = mainWindow
+    mainWindow = undefined
+    navigation = undefined
+    hostUrl = undefined
+    hostCookie = undefined
+    injections = []
+    if (previous !== undefined && !previous.isDestroyed()) previous.destroy()
+    await platformView.closeAndWait()
+    await backend.stop()
+    if (quitting) return
+    const ready = backend.start(prepareHostEnvironment)
+    startup = ready
+    try { await ready }
+    finally { if (startup === ready) startup = undefined }
+  }
   const showWelcome = (): Promise<void> => {
     if (quitting) return Promise.resolve()
     if (welcomeWindow !== undefined && !welcomeWindow.isDestroyed()) {
@@ -1109,10 +1136,32 @@ async function main(): Promise<void> {
     openingWelcome ??= (async () => {
       welcomeWindow = await openWelcomeWindow(locale, {
         g1brainMode: () => Promise.resolve(g1brainAuth.mode),
+        readConnections: () => Promise.resolve({ baseUrl: hostEnvironment.G1BRAIN_BASE_URL ?? '',
+          tableBaseUrl: hostEnvironment.G1BRAIN_TABLE_BASE_URL ?? '' }),
+        saveConnections: async (settings) => {
+          if (g1brainOperation !== 'idle' || enteredWorkspace || g1brainAuth.signedIn || quitting || isMandatory()
+            || startup !== undefined || workspaceRecovery !== undefined || updateState.phase === 'installing') return { ok: false, reason: 'busy' }
+          g1brainOperation = 'connections'
+          try {
+            await connectionStore.save(settings)
+            await restartG1brainHost()
+            return { ok: true, settings }
+          } catch (error) {
+            console.error('G1brain connection preferences could not be applied', error)
+            return { ok: false, reason: 'unavailable' }
+          } finally { g1brainOperation = 'idle' }
+        },
         loginG1brain: async ({ username, password }) => {
-          const result = await g1brainAuth.login(username, password)
-          if (result.ok) await enterWorkspace()
-          return result
+          if (g1brainOperation !== 'idle' || quitting || backend.state.phase !== 'ready') return { ok: false, reason: 'unavailable' }
+          g1brainOperation = 'login'
+          try {
+            const result = await g1brainAuth.login(username, password)
+            if (result.ok) await enterWorkspace()
+            return result
+          } catch (error) {
+            g1brainAuth.signOut()
+            throw error
+          } finally { g1brainOperation = 'idle' }
         },
         analytics: track,
         analyticsEnabled: () => Promise.resolve(analyticsEnabled),
@@ -1131,6 +1180,26 @@ async function main(): Promise<void> {
     })().finally(() => { openingWelcome = undefined })
     return openingWelcome
   }
+  const signOutG1brain = async (): Promise<boolean> => {
+    if (g1brainOperation !== 'idle' || quitting || isMandatory() || !enteredWorkspace || startup !== undefined
+      || workspaceRecovery !== undefined || updateState.phase === 'installing') return false
+    g1brainOperation = 'logout'
+    try {
+      const answer = await ordinaryMessageBox({ type: 'warning', title: locale.messages.g1brainSignOut,
+        message: locale.messages.g1brainSignOutConfirm, buttons: [locale.messages.g1brainSignOut, locale.messages.cancel],
+        cancelId: 1, defaultId: 1 })
+      if (answer.response !== 0 || isQuitting() || isMandatory()) return false
+      g1brainAuth.signOut()
+      enteredWorkspace = false
+      refreshApplicationMenu()
+      raiseAfterUpdate = false
+      mainWindow?.hide()
+      await showWelcome()
+      await restartG1brainHost()
+      return true
+    } finally { g1brainOperation = 'idle' }
+  }
+  ipcMain.handle(DESKTOP_IPC.g1brainSignOut, (event) => { assertProductSender(event); return signOutG1brain() })
   const openInitialWindow = async (): Promise<void> => {
     if (quitting || recovery.active) return
     const state = await readWelcomeState()
@@ -1172,7 +1241,7 @@ async function main(): Promise<void> {
     if (!hasVisibleWindows) focusPrimaryWindow()
   })
   app.on('window-all-closed', () => {
-    if (process.platform !== 'darwin') app.quit()
+    if (process.platform !== 'darwin' && g1brainOperation === 'idle') app.quit()
   })
   if (process.platform !== 'win32') powerMonitor.on('shutdown', () => { sessionEnding = true })
   const finishQuit = (): void => {

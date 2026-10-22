@@ -9,14 +9,17 @@
   en: c80fdff995bab912
   zh: 38a01ab4bf881800
 /g1brain-integration/summary:
-  en: 1545445e2efbd176
-  zh: fbb6c0079973a759
+  en: 51c9b08e41859d85
+  zh: 8c0aebace5d7b198
 /g1brain-integration/table-of-contents:
   en: 0d685fe89ebcee6b
   zh: 0c6d3f99579b1b17
 /g1brain-integration/use-this-package:
-  en: 23e838f395d17aaa
-  zh: ffab6be1722ae6b6
+  en: 005ee02a0ad5dd7f
+  zh: bac618d912686897
+/g1brain-integration/use-this-package/excel-data-routing:
+  en: e44c0eb965dd9630
+  zh: c5201e21e8810ba1
 /g1brain-integration/understand-the-package:
   en: add4afe86dacf76b
   zh: ca2a11d7a10c188b
@@ -45,8 +48,8 @@
   en: a9ca540b87c99cf4
   zh: 7bc0d09e41a3401a
 /g1brain-integration/model-experience/catalog-and-bound-session-tools/what-the-model-sees:
-  en: 2c1735837219e359
-  zh: 84466dd05eaf7eaf
+  en: 1d8feb545ccbc78a
+  zh: cbf9f4be3c1f047f
 /g1brain-integration/model-experience/catalog-and-bound-session-tools/token-effect:
   en: 5cb8e71697377526
   zh: 8bc833de5b28e50b
@@ -54,8 +57,8 @@
   en: 60c5b78cdde3eb7c
   zh: 586e6e0fe6a38ddb
 /g1brain-integration/known-limitations-and-deferred-work:
-  en: 700a409714cb282e
-  zh: 21870c670d74221e
+  en: 00cf6e436a5299d9
+  zh: e973b4fed4697ce7
 /g1brain-integration/known-limitations-and-deferred-work/dev-note:
   en: 0a1253c6f7b5e8b9
   zh: 9f56528562c7c914

@@ -1293,7 +1293,7 @@ export type Config = LocalConfig
 ## `@deepseek-ai/dsh-g1brain-integration`
 
 - `inject`: `tools` · `sessions` · `agents` · `approval` · `systemPrompt`
-- `source`: [`packages/g1brain/integration/src/index.ts:60`](../packages/g1brain/integration/src/index.ts)
+- `source`: [`packages/g1brain/integration/src/index.ts:65`](../packages/g1brain/integration/src/index.ts)
 
 ```ts config-catalog
 /** Deployment settings; credentials stay in the Host process. */
@@ -1306,6 +1306,12 @@ export interface Config {
   readonly tenantId: string
   /** Maximum duration of one catalog request in milliseconds. */
   readonly timeoutMs: number
+  /** Separate table-service root; empty disables Excel routing and preserves Markdown-only ingestion. */
+  readonly tableBaseUrl: string
+  /** Table HTTP/MCP request deadline, including upload acceptance. */
+  readonly tableTimeoutMs: number
+  /** Maximum generated XLSX bytes accepted by the table service. */
+  readonly tableMaxUploadBytes: number
 }
 ```
 <!-- END GENERATED config-catalog:@deepseek-ai/dsh-g1brain-integration -->

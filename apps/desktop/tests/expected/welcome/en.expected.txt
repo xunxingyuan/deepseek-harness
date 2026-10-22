@@ -5,3 +5,4 @@ Username
 Password
 Enter workspace
 Development mode: your password is not verified by G1brain.
+Connection settings

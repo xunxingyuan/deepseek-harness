@@ -257,7 +257,7 @@ class G1BrainClientImpl {
     return listValue<unknown>(await this.request(`/mdApi/v1/md/collections/${encodeURIComponent(collectionName)}/all`))
   }
 
-  async uploadMdFile(collectionName: string, fileName: string, contents: Uint8Array | string): Promise<unknown> {
+  async uploadMdFile(collectionName: string, fileName: string, contents: Uint8Array | string, signal?: AbortSignal): Promise<unknown> {
     const form = new FormData()
     const bytes = typeof contents === 'string' ? new TextEncoder().encode(contents) : contents
     const file = new File([bytes as BlobPart], fileName, { type: typeof contents === 'string' ? 'text/markdown; charset=utf-8' : 'application/octet-stream' })
@@ -265,6 +265,7 @@ class G1BrainClientImpl {
     return this.request(`/mdApi/v1/md/collections/${encodeURIComponent(collectionName)}/mds`, {
       method: 'POST',
       body: form,
+      ...(signal === undefined ? {} : { signal }),
     })
   }
 

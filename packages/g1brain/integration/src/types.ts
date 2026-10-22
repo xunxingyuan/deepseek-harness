@@ -14,6 +14,8 @@ export interface G1brainStatus {
   readonly configured: boolean
   /** Authorization mode used for catalog requests. Local development does not authenticate the entered password. */
   readonly mode: 'local-dev' | 'oauth'
+  /** Whether prepared Sessions can route Excel into the separately configured table service. */
+  readonly tableConfigured?: boolean
 }
 
 /** Source directory and G1brain targets approved for one Harness Session. */

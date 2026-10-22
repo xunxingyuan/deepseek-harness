@@ -5,3 +5,4 @@ G1brain × DeepSeek
 密码
 进入工作台
 开发模式：当前不会向 G1brain 服务端校验密码。
+连接设置

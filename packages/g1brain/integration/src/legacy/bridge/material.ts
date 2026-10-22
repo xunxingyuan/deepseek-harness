@@ -61,8 +61,24 @@ function cellText(cell: XLSX.CellObject | undefined): string {
     .replaceAll('\\', '\\\\').replaceAll('|', '\\|').replace(/\r\n?|\n/g, '<br>')
 }
 
-function spreadsheet(bytes: Buffer, maxBytes: number): string {
-  const workbook = XLSX.read(bytes, { type: 'buffer', cellDates: true, cellFormula: true, sheetStubs: true })
+/** Parse bounded Office bytes without evaluating formulas or external links.
+ * @param bytes - complete source workbook bytes.
+ * @param extension - XLSX or XLS source extension.
+ * @param maxExpandedBytes - maximum expanded archive bytes.
+ * @returns the parsed workbook, retaining cached values and number formats.
+ */
+export function readWorkbook(bytes: Buffer, extension: string, maxExpandedBytes: number): XLSX.WorkBook {
+  if (extension === '.xlsx') validateArchive(bytes, 'xl/workbook.xml', maxExpandedBytes)
+  else if (extension !== '.xls' || !bytes.subarray(0, 8).equals(oleSignature)) throw new Error('文件不是有效的 XLS/XLSX；请另存为未加密的 XLSX 后重试')
+  return XLSX.read(Buffer.from(bytes), { type: 'buffer', cellDates: true, cellFormula: true, cellNF: true, sheetStubs: true })
+}
+
+/** Render selected workbook sheets as bounded Markdown without changing source cells.
+ * @param workbook - parsed workbook, optionally narrowed to selected sheets.
+ * @param maxBytes - complete UTF-8 output limit.
+ * @returns readable worksheet text with cached formula results.
+ */
+export function workbookMarkdown(workbook: XLSX.WorkBook, maxBytes: number): string {
   const parts: string[] = []
   let size = 0
   const append = (value: string) => {
@@ -116,9 +132,7 @@ export async function extractMaterial(bytes: Buffer, extension: string, maxOutpu
     return checked(body + '\n\n注：仅提取正文与表格，不包含图片 OCR 或原始版式。\n', maxOutputBytes)
   }
   if (extension === '.xlsx' || extension === '.xls') {
-    if (extension === '.xlsx') validateArchive(bytes, 'xl/workbook.xml', maxExpandedBytes)
-    else if (!bytes.subarray(0, 8).equals(oleSignature)) throw new Error('文件不是有效的 XLS；请在 Excel 中另存为 XLSX 后重试')
-    return checked(spreadsheet(bytes, maxOutputBytes), maxOutputBytes)
+    return checked(workbookMarkdown(readWorkbook(bytes, extension, maxExpandedBytes), maxOutputBytes), maxOutputBytes)
   }
   if (!textExtensions.has(extension)) throw new Error(`不支持直接提取 ${extension} 正文；请先导出为 DOCX、XLSX 或 UTF-8 Markdown，不能直接上传二进制内容到 Markdown 文档库`)
   return checked(decodeText(bytes), maxOutputBytes)

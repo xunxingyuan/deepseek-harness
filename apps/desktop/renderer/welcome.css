@@ -243,6 +243,12 @@ body {
   width: 100%;
 }
 
+.connection-form { gap: 24px; }
+.connection-form .key-heading p { font-size: 14px; }
+.connection-hint { margin: 0; color: var(--dsw-alias-label-secondary); font-size: 12px; line-height: 18px; }
+.actions .connection-settings { height: 28px; padding: 2px 10px; background: transparent; color: var(--dsw-alias-label-secondary); }
+.actions .connection-settings:hover:not(:disabled) { color: var(--dsw-alias-label-primary); }
+
 .g1brain-fields .key-field > span {
   display: block;
   margin-bottom: 8px;

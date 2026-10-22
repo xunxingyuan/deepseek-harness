@@ -12,11 +12,11 @@ const t = ((key: G1brainKey, values?: Record<string, string>) => Object.entries(
   (copy, [name, value]) => copy.replaceAll(`{${name}}`, value), zh[key],
 )) as G1brainHomeProps['t']
 
-function home(configured: boolean) {
+function home(configured: boolean, tableConfigured = false) {
   const openSession = vi.fn(async (_input: Parameters<G1brainHomeProps['openSession']>[0]) => {})
   const pickDirectory = vi.fn(async () => '/tmp/g1brain-material')
   const loadDomains = vi.fn(async () => [{ name: '设备领域', displayName: '设备运维领域' }])
-  const loadCatalog = vi.fn(async () => ({ configured, mode: 'local-dev' as const,
+  const loadCatalog = vi.fn(async () => ({ configured, tableConfigured, mode: 'local-dev' as const,
     ontologies: [{ name: '已有本体', displayName: '设备运维知识图谱' }], libraries: [{ name: '现有资料库' }],
   }))
   render(<G1brainHome {...({ t, openSession, pickDirectory, loadCatalog, loadDomains })} />)
@@ -24,6 +24,29 @@ function home(configured: boolean) {
 }
 
 describe('G1brain landing page', () => {
+  it('allows a table-only Session only when the table service is configured', async () => {
+    const { openSession } = home(true, true)
+    await screen.findByText(zh.connected)
+    fireEvent.click(screen.getByRole('button', { name: zh.modeNew }))
+    fireEvent.change(screen.getByPlaceholderText(zh.ontologyNamePlaceholder), { target: { value: '生产本体' } })
+    fireEvent.change(screen.getByPlaceholderText(zh.domainNewPlaceholder), { target: { value: '生产领域' } })
+    fireEvent.click(screen.getByRole('button', { name: zh.libraryNone }))
+    expect(screen.queryByPlaceholderText(zh.libraryNamePlaceholder)).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: zh.pickDirectory }))
+    await waitFor(() => { expect(screen.getByRole('button', { name: zh.proceed }).hasAttribute('disabled')).toBe(false) })
+    fireEvent.click(screen.getByRole('button', { name: zh.proceed }))
+    await waitFor(() => { expect(openSession).toHaveBeenCalledTimes(1) })
+    const call = openSession.mock.calls[0]?.[0]
+    expect(call?.target.documentLibraryName).toBeUndefined()
+    expect(call?.target.createDocumentLibraryName).toBeUndefined()
+    expect(call?.prompt).toContain(zh.promptLibraryNone)
+    cleanup()
+    home(true)
+    await screen.findByText(zh.connected)
+    fireEvent.click(screen.getByRole('button', { name: zh.modeNew }))
+    expect(screen.queryByRole('button', { name: zh.libraryNone })).toBeNull()
+  })
+
   it('hides system domains and selects the only business domain so existing-resource work can proceed', async () => {
     const openSession = vi.fn(async (_input: Parameters<G1brainHomeProps['openSession']>[0]) => {})
     render(<G1brainHome t={t} loadCatalog={async () => ({ configured: true, mode: 'local-dev',
@@ -109,7 +132,8 @@ describe('G1brain landing page', () => {
     expect(call.prompt).toContain('必须由 Harness 逐次审批')
     expect(call.prompt).toContain('仅查询或要求先给方案时不执行写入')
     expect(call.prompt).not.toContain('在我确认方案前')
-    expect(call.prompt).toContain('先提交 MD 切片任务并确认成功')
+    expect(call.prompt).toContain('只有实际上传到向量文档库的内容才执行 MD')
+    expect(call.prompt).toContain('g1brain_get_table_imports')
     expect(call.prompt).toContain('中文提问使用简体中文')
   })
 

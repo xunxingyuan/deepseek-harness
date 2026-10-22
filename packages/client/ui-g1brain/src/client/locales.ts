@@ -1,5 +1,8 @@
 /** G1brain workbench copy. */
 export const zh = {
+  signOut: '退出登录',
+  signingOut: '正在退出…',
+  signOutFailed: '暂时无法退出登录，请稍后重试。',
   brand: 'G1brain × DeepSeek',
   panel: 'G1brain',
   eyebrow: 'G1brain 工作入口',
@@ -59,6 +62,10 @@ export const zh = {
   sectionLibraryHelp: '选择已有文档库，或为本次工作填写新文档库名称。',
   libraryNew: '新建文档库',
   libraryExisting: '使用已有文档库',
+  libraryNone: '仅表格数据',
+  libraryNoneHelp: '不创建向量文档库；只导入规整数据工作表。若文件含说明内容，会先提示重新选择文档库，不会丢弃内容',
+  tableServiceRequired: '仅表格模式需要先配置表格服务',
+  promptLibraryNone: '本次仅处理规整表格数据，未绑定向量文档库。先预检；若有说明性内容，请告知我重新选择文档库，不能跳过内容或擅自创建未绑定的文档库。',
   libraryName: '新文档库名称',
   libraryNamePlaceholder: '例如：设备规范资料',
   libraryExistingLabel: '已有文档库',
@@ -91,12 +98,15 @@ export const zh = {
   promptLibraryNew: '目标文档库：计划新建「{name}」。',
   promptLibraryExisting: '目标文档库：已有「{name}」。',
   promptSafety: '先盘点资料并引用证据。在所选本体、领域和文档库范围内，本次已要求的新增、修改、上传和文档处理可直接执行，无需额外请求我确认；仅查询或要求先给方案时不执行写入。删除以及可能删除已有内容的替换导入，必须由 Harness 逐次审批，不要再单独发起聊天确认。',
-  promptProcessing: '上传资料后，先提交 MD 切片任务并确认成功，再提交文件片段的关键词、向量化和索引创建任务；处理完成前不要宣称文档可检索。',
+  promptProcessing: '如果 g1brain_inspect_materials 可用，先预检 Excel 分流。规整工作表进入当前 domain 对应的表格集合，并用 g1brain_get_table_imports 确认 completed；partial、failed、needs_input 或未知结果都不算完成。只有实际上传到向量文档库的内容才执行 MD 切片和 CHUNK 关键词、向量化及索引任务；未完成前不要宣称数据可查询。表格统计使用只读 SQL，不用向量检索代替精确计算。',
   promptLanguage: '请使用我当前提问的语言回复，包括过程说明、澄清问题和最终结果。中文提问使用简体中文，除非我明确要求其他语言。',
 } as const
 
 /** English copy, key-identical to the Chinese dictionary. */
 export const en: Record<keyof typeof zh, string> = {
+  signOut: 'Sign out',
+  signingOut: 'Signing out…',
+  signOutFailed: 'Could not sign out. Please try again.',
   brand: 'G1brain × DeepSeek',
   panel: 'G1brain',
   eyebrow: 'G1brain workspace',
@@ -156,6 +166,10 @@ export const en: Record<keyof typeof zh, string> = {
   sectionLibraryHelp: 'Select an existing library or name a new one for this work.',
   libraryNew: 'New document library',
   libraryExisting: 'Existing document library',
+  libraryNone: 'Table data only',
+  libraryNoneHelp: 'No vector library will be created. Only regular data sheets can be imported. Explanatory content requires choosing a library first and will not be discarded.',
+  tableServiceRequired: 'Configure the table service before using table-only mode',
+  promptLibraryNone: 'This Session is for regular table data only and has no vector document library. Preflight the files first. If explanatory content is present, ask me to prepare a Session with a library; do not omit content or create an unbound library.',
   libraryName: 'New document library name',
   libraryNamePlaceholder: 'For example: equipment standards',
   libraryExistingLabel: 'Existing document library',
@@ -188,7 +202,7 @@ export const en: Record<keyof typeof zh, string> = {
   promptLibraryNew: 'Target document library: plan to create “{name}”.',
   promptLibraryExisting: 'Target document library: existing “{name}”.',
   promptSafety: 'First inventory the sources and cite evidence. Execute requested creation, updates, uploads, and document processing within the selected ontology, domain, and document library without asking for extra confirmation. A request only for information or a plan is not a request to write data. Deletion and replacement imports that may remove existing content must receive individual Harness approval; do not ask for a separate chat confirmation.',
-  promptProcessing: 'After files are uploaded, submit an MD slicing task and confirm success before submitting chunk keyword, vectorization, and index tasks. Do not claim documents are searchable until processing finishes.',
+  promptProcessing: 'When g1brain_inspect_materials is available, preflight Excel routing first. Import regular sheets into the current domain’s table collection and verify completed through g1brain_get_table_imports. partial, failed, needs_input, and unknown results are not success. Run MD slicing and CHUNK keyword, vectorization, and index tasks only for content actually uploaded to the vector library. Do not claim data is queryable before processing completes. Use read-only SQL for table statistics, not vector-search arithmetic.',
   promptLanguage: 'Reply in the language of my current request, including progress updates, clarification questions, and the final result. Use Simplified Chinese when I ask in Chinese, unless I explicitly request another language.',
 }
 
