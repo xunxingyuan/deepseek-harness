@@ -3,7 +3,7 @@ import type { G1BrainClient } from '../g1brain/client.ts'
 import { ScopeError } from '../errors.ts'
 import type { DocumentTaskSubmission, PreparedTask, ToolResult } from '../types.ts'
 import type { WorkspaceScope } from './scope.ts'
-import { requireResourceName, resourceName } from '../../names.ts'
+import { NEW_SID_DESCRIPTION, NEW_SID_PATTERN, requireNewSid, requireResourceName, resourceName } from '../../names.ts'
 
 /** Model-facing legacy G1brain operation before Harness registration. */
 export interface ToolDefinition {
@@ -25,6 +25,8 @@ const documentCollection = {
   type: 'string', minLength: 1,
   description: '文档库集合的 API name，普通会话先列出文档库取其 name；绑定会话取自 g1brain_context.task.documentLibraryName 或 createDocumentLibraryName。不是本体集合名、领域名或 displayName。',
 }
+
+const newSid = { type: 'string', minLength: 1, pattern: NEW_SID_PATTERN, description: NEW_SID_DESCRIPTION }
 
 function text(value: unknown): ToolResult {
   const serialized = typeof value === 'string' ? value : JSON.stringify(value, null, 2)
@@ -608,13 +610,13 @@ export function createG1BrainTools(context: BridgeContext): ToolDefinition[] {
     // --- P1: Fine-Grained Entity, Relation & Property Operations ---
     {
       name: 'g1brain_create_ontology_entity',
-      description: '在指定领域内创建实体。properties 只接受字符串、有限数字或布尔值；复杂值和多值属性请使用 statements。',
+      description: '在指定领域内创建类或个体。新建 SID 使用普通英文标识，中文放入 displayName；引用已有类与属性时保留原 SID。properties 只接受字符串、有限数字或布尔值；复杂值和多值属性请使用 statements。',
       inputSchema: {
         type: 'object',
         properties: {
           collectionName: { type: 'string', minLength: 1 },
           domainName: { type: 'string', minLength: 1 },
-          sid: { type: 'string', minLength: 1 },
+          sid: newSid,
           displayName: { type: 'string', minLength: 1 },
           isClass: { type: 'boolean' },
           parentClassSid: { type: 'string' },
@@ -636,7 +638,7 @@ export function createG1BrainTools(context: BridgeContext): ToolDefinition[] {
               requiredString(args, 'collectionName'),
               requiredString(args, 'domainName'),
               {
-                sid: requiredString(args, 'sid'),
+                sid: requireNewSid(args.sid),
                 displayName: requiredString(args, 'displayName'),
                 isClass: optionalBoolean(args, 'isClass'),
                 parentClassSid: optionalString(args, 'parentClassSid'),
@@ -692,7 +694,7 @@ export function createG1BrainTools(context: BridgeContext): ToolDefinition[] {
     },
     {
       name: 'g1brain_create_ontology_relation',
-      description: '在两个实体之间创建拓扑关系（从 fromSid 指向 toSid）。',
+      description: '在两个实体之间创建拓扑关系（从 fromSid 指向 toSid）。relationSid 必须来自已有关系定义，不能传显示名；工具会解析为与网页一致的边标签。已有带点号 SID 可引用，不要去掉点号或拼接领域前缀。',
       inputSchema: {
         type: 'object',
         properties: {
@@ -700,7 +702,7 @@ export function createG1BrainTools(context: BridgeContext): ToolDefinition[] {
           domainName: { type: 'string', minLength: 1 },
           fromSid: { type: 'string', minLength: 1 },
           toSid: { type: 'string', minLength: 1 },
-          relationSid: { type: 'string', minLength: 1 },
+          relationSid: { type: 'string', minLength: 1, description: '已有关系类型的准确 SID；先查询 g1brain_list_ontology_relation_definitions。不是关系显示名或边 ID。' },
           properties: { type: 'object' },
         },
         required: ['collectionName', 'domainName', 'fromSid', 'toSid', 'relationSid'],
@@ -808,10 +810,10 @@ export function createG1BrainTools(context: BridgeContext): ToolDefinition[] {
     },
     {
       name: 'g1brain_create_ontology_relation_type',
-      description: '在领域内创建关系类型定义。sourceType、targetType 为可选类 SID。',
+      description: '在领域内创建关系类型定义。新建 SID 使用普通英文标识；displayName 可用中文，但不能含点号。sourceType、targetType 为已有类的准确 SID，不改写旧标识。',
       inputSchema: { type: 'object', properties: {
         collectionName: { type: 'string', minLength: 1 }, domainName: { type: 'string', minLength: 1 },
-        sid: { type: 'string', minLength: 1 }, displayName: { type: 'string', minLength: 1 }, description: { type: 'string' },
+        sid: newSid, displayName: { type: 'string', minLength: 1 }, description: { type: 'string' },
         sourceType: { type: 'string' }, targetType: { type: 'string' }, relationCategory: { type: 'string' },
         inverseRelationType: { type: 'string' }, symmetric: { type: 'boolean' }, inferable: { type: 'boolean' },
         domains: { type: 'array', items: { type: 'string' } },
@@ -821,7 +823,7 @@ export function createG1BrainTools(context: BridgeContext): ToolDefinition[] {
         const description = optionalString(args, 'description')
         return text(await client.createOntologyRelationType(
           requiredString(args, 'collectionName'), requiredString(args, 'domainName'), {
-            sid: requiredString(args, 'sid'), displayName,
+            sid: requireNewSid(args.sid), displayName,
             labels: { zh: { lang: 'zh', value: displayName } },
             ...(description ? { descriptions: { zh: { lang: 'zh', value: description } } } : {}),
             ...(optionalString(args, 'sourceType') ? { sourceType: optionalString(args, 'sourceType') } : {}),
@@ -849,7 +851,7 @@ export function createG1BrainTools(context: BridgeContext): ToolDefinition[] {
     },
     {
       name: 'g1brain_rename_ontology_relation_type',
-      description: '修改关系类型的显示名称，不更改关系 SID 或边标签。',
+      description: '修改关系类型的显示名称，不更改关系 SID 或已有边标签。新显示名不能含点号；已有边不会自动迁移，新建边将使用新显示名。',
       inputSchema: { type: 'object', properties: {
         collectionName: { type: 'string', minLength: 1 }, domainName: { type: 'string', minLength: 1 },
         relationSid: { type: 'string', minLength: 1 }, newDisplayName: { type: 'string', minLength: 1 },
@@ -871,17 +873,17 @@ export function createG1BrainTools(context: BridgeContext): ToolDefinition[] {
     },
     {
       name: 'g1brain_create_ontology_property',
-      description: '创建领域属性定义。',
+      description: '创建领域属性定义。新建 SID 使用普通英文标识，中文名称放入 displayName；domains 引用已有领域名称，不是类 SID。',
       inputSchema: { type: 'object', properties: {
         collectionName: { type: 'string', minLength: 1 }, domainName: { type: 'string', minLength: 1 },
-        sid: { type: 'string', minLength: 1 }, displayName: { type: 'string', minLength: 1 },
+        sid: newSid, displayName: { type: 'string', minLength: 1 },
         description: { type: 'string' },
         valueType: { type: 'string', enum: ['STRING', 'INTEGER', 'DECIMAL', 'BOOLEAN', 'DATE', 'DATETIME', 'JSON', 'QUANTITY', 'GEO', 'URL', 'ENTITY_REF', 'PROPERTY_REF', 'MEDIA_REF', 'UNKNOWN'] },
         kind: { type: 'string', enum: ['SCALAR', 'LIST', 'ENTITY', 'TIMESERIES', 'RELATION'] },
         domains: { type: 'array', items: { type: 'string' } },
       }, required: ['collectionName', 'domainName', 'sid', 'displayName', 'valueType', 'kind'], additionalProperties: false },
       execute: args => withToolError(async () => text(await client.createOntologyProperty(requiredString(args, 'collectionName'), requiredString(args, 'domainName'), {
-        sid: requiredString(args, 'sid'), displayName: requiredString(args, 'displayName'),
+        sid: requireNewSid(args.sid), displayName: requiredString(args, 'displayName'),
         ...(optionalString(args, 'description') ? { description: optionalString(args, 'description') } : {}),
         valueType: requiredString(args, 'valueType'), kind: requiredString(args, 'kind'),
         ...(optionalStringArray(args, 'domains') ? { domains: optionalStringArray(args, 'domains') } : {}),

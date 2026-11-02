@@ -33,6 +33,8 @@ kind: "package-reference"
 
 文件读取会提取 DOCX 段落与表格，以及按工作表分组的 XLSX/XLS 单元格。文本输入支持严格 UTF-8 或带 BOM 的 UTF-16；其他编码会报错，不会插入替换字符。文档上传将提取出的 UTF-8 Markdown 而非 Office 原始二进制发送到 MD API。非 Markdown 文档保留原后缀并追加 `.md`，因此 `report.docx` 与 `report.xlsx` 不会混淆。首次请求前须确保所有文件解析成功且上传名称不重复。原文件保持不变。文件大小上限约束 Office 解压总量；读取另有输出上限，不截断正文。开始上传后若 HTTP 请求失败，可能留下部分已上传文件。文档任务的 `collectionName` 是绑定文档库的 API 名称，不能使用本体集合、领域或显示名称。
 
+细粒度创建类、个体、属性和关系类型时，SID 必须匹配 `^[A-Za-z][A-Za-z0-9_]*$`，例如 `Instrument`、`belongs_to_unit`；不要拼接集合或领域前缀，中文名称填写 `displayName`。创建工具和 REST 客户端都会在请求前拒绝不合规 SID。已有引用（包括带点号 SID）在查询、更新和创建关系时保持原值。创建关系边必须传入生效关系定义的准确 SID；工具先解析其 `displayName || sid`，再按网页一致的规则提交。缺失定义、显示名重名、标签含点号或控制字符时不写入，也不会换名重试。创建关系定义或修改显示名时同样拒绝这些不可用标签。本体包导入仍遵循服务端包 ID 格式，不会自动改写包 ID 或已有引用。
+
 <a id="excel-data-routing"></a>
 ### Excel 数据分流
 
@@ -82,6 +84,8 @@ Use the available G1brain tools for ontology and document operations. Ordinary S
 If write tools are absent, explain that this Session is read-only and direct the user to prepare a G1brain build or improvement Session. Do not interpret missing write tools as missing API credentials or ask the user to install another plugin.
 
 Before writing in a prepared Session, call g1brain_context and use its bound collection and domain API names for creation and all later references. Display names are labels only; never translate or regenerate bound identifiers. System domains such as _schema and _shared are not business write targets.
+
+New class, instance, property, and relation-type SIDs must start with an ASCII letter and contain only ASCII letters, digits, or underscores, for example Instrument or belongs_to_unit. Do not prefix a SID with the collection or domain, and do not use dots, hyphens, spaces, or Chinese characters. Put human-readable names in displayName. Preserve existing SIDs exactly when querying, updating, or referencing them. To create an edge, pass the exact SID from the effective relation definitions, not a display name; the tool resolves the Web-compatible edge label and refuses ambiguous names or labels containing dots.
 
 Use g1brain_read_selected_file to extract DOCX or Excel text and tables, not a raw text read of Office bytes. Document uploads extract UTF-8 Markdown before ingestion. Unsupported or encrypted files must be converted first; never upload garbled text as a successful extraction. Document uploads and processing tasks use the document library API name from the Session context, not the ontology collection name or a display name.
 

@@ -1,0 +1,16 @@
+# Bilingual-pair consistency record for guide.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write docs/upgrade-guide/v0.2.1-alpha.1/g1brain-sid-rules/guide.md
+/:
+  en: 9318fe0a882eb2a5
+  zh: b86ec4c7d8cccb7f
+/g1brain-sid-rules:
+  en: c8fadf8c1805530c
+  zh: 1c1875930503db17
+/g1brain-sid-rules/change:
+  en: 2bcd25c5cdc391e6
+  zh: 0709dbbe035d170c
+/g1brain-sid-rules/migration:
+  en: b3816f7adcb1e867
+  zh: a978f79481ea72a0

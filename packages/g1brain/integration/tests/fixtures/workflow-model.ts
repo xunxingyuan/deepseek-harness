@@ -26,6 +26,16 @@ const tableCalls = [
   { name: 'g1brain_get_table_imports', args: {} },
 ] as const
 
+const sidTarget = { collectionName: 'col_7c120e3057d72928f5491e86', domainName: 'dom_e4d35bcec9eb3d594c4bdeb7' }
+const sidCalls = [
+  ...legacyCalls.slice(0, 7),
+  { name: 'g1brain_create_ontology_property', args: { ...sidTarget, sid: 'domain.invalid', displayName: '拒绝的属性', kind: 'SCALAR', valueType: 'STRING' } },
+  { name: 'g1brain_create_ontology_property', args: { ...sidTarget, sid: 'tag_number', displayName: '位号', kind: 'SCALAR', valueType: 'STRING' } },
+  { name: 'g1brain_create_ontology_relation_type', args: { ...sidTarget, sid: 'belongs_to_unit', displayName: '属于单元' } },
+  { name: 'g1brain_create_ontology_relation', args: { ...sidTarget, fromSid: 'legacy.Source', toSid: 'legacy.Target', relationSid: 'belongs_to_unit' } },
+  { name: 'g1brain_create_ontology_relation', args: { ...sidTarget, fromSid: 'legacy.Source', toSid: 'legacy.Target', relationSid: 'legacy.contains' } },
+] as const
+
 class WorkflowAdapter extends LlmAdapter {
   override async resolveModel(provider: string, model: string) {
     return { provider, id: model, name: model }
@@ -33,7 +43,8 @@ class WorkflowAdapter extends LlmAdapter {
 
   async * stream(options: GenerateOptions): AsyncIterable<StreamChunk> {
     const tables = process.env.G1BRAIN_TEST_TABLES === '1'
-    const calls = tables ? tableCalls : legacyCalls
+    const sidMode = process.env.G1BRAIN_TEST_SID === '1'
+    const calls = sidMode ? sidCalls : tables ? tableCalls : legacyCalls
     const tools = options.tools ?? []
     for (const call of calls) {
       if (!tools.some(tool => tool.name === call.name)) throw new Error(`G1brain workflow tool missing: ${call.name}`)
@@ -41,6 +52,7 @@ class WorkflowAdapter extends LlmAdapter {
     const text = options.messages.flatMap(message => message.content.flatMap(block => block.type === 'text' ? [block.text] : [])).join('\n')
     if (!text.includes('Use Simplified Chinese for Chinese requests')) throw new Error('G1brain reply-language guidance missing')
     if (!text.includes('without asking for extra confirmation')) throw new Error('G1brain automatic non-deletion policy missing')
+    if (!text.includes('Do not prefix a SID with the collection or domain')) throw new Error('G1brain SID guidance missing')
     const completed = options.messages.filter(message => message.role === 'tool').length
     if (completed >= 2 && !text.includes('G1BRAIN_WINDOWS_MATERIAL_EVIDENCE')) throw new Error('Chinese materials file was not read')
     if (completed >= 3 && !text.includes('生产周报：中文正文')) throw new Error('Word Chinese text was not extracted')
@@ -56,8 +68,10 @@ class WorkflowAdapter extends LlmAdapter {
       return
     }
     if (tables && completed >= tableCalls.length && (!text.includes('215') || !text.includes('completed'))) throw new Error('Table evidence missing')
-    const answer = tables ? '已分流 Excel：数据表导入完成，说明进入文档库；SQL 总产量为 215。'
-      : '已读取中文材料并直接创建周报本体、领域和文档库；废弃属性经审批后删除。'
+    if (sidMode && !text.includes('格式无效')) throw new Error('Unsafe SID was not rejected in the Session')
+    const answer = sidMode ? '已拒绝不合规新 SID，普通 SID 与旧关系 SID 均按显示名写入。'
+      : tables ? '已分流 Excel：数据表导入完成，说明进入文档库；SQL 总产量为 215。'
+        : '已读取中文材料并直接创建周报本体、领域和文档库；废弃属性经审批后删除。'
     yield { type: 'block-start', index: 0, blockType: 'text' }
     yield { type: 'text-delta', index: 0, text: answer }
     yield { type: 'block-end', index: 0, block: { type: 'text', text: answer } }

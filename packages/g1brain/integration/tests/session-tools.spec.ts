@@ -204,7 +204,7 @@ describe('bound G1brain Session tools', () => {
       callId: `property-${sid}` as never, name: 'g1brain_create_ontology_property',
       arguments: { collectionName: 'test_ontology', domainName: 'equipment', sid, displayName: sid,
         valueType: 'STRING', kind: 'SCALAR' }, agent: agent as never })
-    for (let index = 0; index < 105; index += 1) expect((await property(`property-${index}`)).isError).toBe(false)
+    for (let index = 0; index < 105; index += 1) expect((await property(`property_${index}`)).isError).toBe(false)
     const updated = await ctx.tools.execute({ signal: new AbortController().signal,
       callId: 'update-property' as never, name: 'g1brain_update_ontology_property',
       arguments: { collectionName: 'test_ontology', domainName: 'equipment', propertySid: 'property-1', properties: { description: '更新说明' } },

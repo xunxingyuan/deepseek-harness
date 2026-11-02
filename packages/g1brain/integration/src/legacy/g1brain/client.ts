@@ -12,7 +12,7 @@ import type {
 } from '../types.ts'
 import { G1BrainError } from '../errors.ts'
 import { encryptG1Password } from './crypto.ts'
-import { requireResourceName } from '../../names.ts'
+import { requireNewSid, requireRelationLabel, requireResourceName } from '../../names.ts'
 
 type FetchLike = typeof fetch
 
@@ -459,6 +459,7 @@ class G1BrainClientImpl {
       treeId?: string | undefined
     },
   ): Promise<unknown> {
+    requireNewSid(data.sid)
     const c = encodeURIComponent(collectionName)
     const d = encodeURIComponent(domainName)
     const statements = entityStatements(data.properties, data.statements)
@@ -514,6 +515,12 @@ class G1BrainClientImpl {
     })
   }
 
+  /** Resolve an existing relation SID to the Web editor's edge label without changing stored identifiers.
+   * @param collectionName - existing collection API name.
+   * @param domainName - existing business domain API name.
+   * @param data - exact entity and relation SIDs, including legacy identifiers, and optional edge properties.
+   * @returns the created edge; missing definitions, ambiguous names or unsafe labels reject before POST.
+   */
   async createOntologyRelation(
     collectionName: string,
     domainName: string,
@@ -526,10 +533,21 @@ class G1BrainClientImpl {
   ): Promise<unknown> {
     const c = encodeURIComponent(collectionName)
     const d = encodeURIComponent(domainName)
+    const definitions = listValue<Record<string, unknown>>(await this.listEffectiveRelationDefinitions(collectionName, domainName))
+    const matches = definitions.filter(item => item.sid === data.relationSid)
+    const definition = matches[0]
+    if (matches.length !== 1 || !definition || definition.kind !== 'RELATION') {
+      throw new G1BrainError('relationSid 必须是当前领域唯一的已有关系类型 SID；请先查询关系定义，不要传显示名或自行改写 SID')
+    }
+    const label = requireRelationLabel(typeof definition.displayName === 'string' && definition.displayName.trim()
+      ? definition.displayName : data.relationSid)
+    if (definitions.some(item => item !== definition && (item.displayName === label || item.sid === label))) {
+      throw new G1BrainError('关系显示名与其他关系定义冲突，无法唯一确定边标签；请先消除重名，不会尝试写入')
+    }
     const payload = {
       fromSid: data.fromSid,
       toSid: data.toSid,
-      relationSid: data.relationSid,
+      relationSid: label,
       properties: data.properties ?? {},
     }
     return this.request(`/kgApi/v1/gs/collections/${c}/domains/${d}/relations`, {
@@ -581,6 +599,9 @@ class G1BrainClientImpl {
   }
 
   async createOntologyRelationType(collectionName: string, domainName: string, data: Record<string, unknown>): Promise<unknown> {
+    requireNewSid(data.sid)
+    if (typeof data.displayName !== 'string') throw new G1BrainError('关系显示名必须是字符串')
+    requireRelationLabel(data.displayName)
     return this.request(`/kgApi/v1/gs/collections/${encodeURIComponent(collectionName)}/domains/${encodeURIComponent(domainName)}/relation-types`, {
       method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data),
     })
@@ -599,6 +620,7 @@ class G1BrainClientImpl {
   async renameOntologyRelationType(
     collectionName: string, domainName: string, relationSid: string, newDisplayName: string,
   ): Promise<unknown> {
+    requireRelationLabel(newDisplayName)
     const path = `/kgApi/v1/gs/collections/${encodeURIComponent(collectionName)}/domains/${encodeURIComponent(domainName)}`
     return this.request(`${path}/relation-types/${encodeURIComponent(relationSid)}/rename-label`, {
       method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ newDisplayName }),
@@ -622,6 +644,11 @@ class G1BrainClientImpl {
   }
 
   async createOntologyProperty(collectionName: string, domainName: string, data: Record<string, unknown>): Promise<unknown> {
+    requireNewSid(data.sid)
+    if (data.kind === 'RELATION') {
+      if (typeof data.displayName !== 'string') throw new G1BrainError('关系显示名必须是字符串')
+      requireRelationLabel(data.displayName)
+    }
     return this.request(`/kgApi/v1/gs/collections/${encodeURIComponent(collectionName)}/domains/${encodeURIComponent(domainName)}/props`, {
       method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data),
     })

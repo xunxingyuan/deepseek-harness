@@ -31,7 +31,9 @@ export function validateInput(schema: Record<string, unknown>, value: unknown, p
   } else if (type === 'string') {
     if (typeof value !== 'string') throw new Error(`${path} 必须是字符串`)
     if (typeof schema.minLength === 'number' && value.trim().length < schema.minLength) throw new Error(`${path} 不能为空`)
-    if (typeof schema.pattern === 'string' && !(new RegExp(schema.pattern).test(value))) throw new Error(`${path} 格式无效`)
+    if (typeof schema.pattern === 'string' && !(new RegExp(schema.pattern).test(value))) {
+      throw new Error(`${path} 格式无效${typeof schema.description === 'string' ? `：${schema.description}` : ''}`)
+    }
   } else if (type === 'integer') {
     if (typeof value !== 'number' || !Number.isSafeInteger(value)) throw new Error(`${path} 必须是整数`)
   } else if (type === 'number') {

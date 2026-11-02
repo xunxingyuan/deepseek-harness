@@ -19,6 +19,8 @@ if (!overlay) throw new Error('G1brain workflow driver requires a patch path')
 const requests: string[] = []
 const failures: string[] = []
 const tableMode = process.env.G1BRAIN_TEST_TABLES === '1'
+const sidMode = process.env.G1BRAIN_TEST_SID === '1'
+const relationDefinitions = [{ kind: 'RELATION', sid: 'legacy.contains', displayName: '兼容包含' }]
 const tableCollections: Array<{ id: string; name: string; description: string }> = []
 const server = createServer((request, response) => {
   void (async () => {
@@ -93,6 +95,25 @@ const server = createServer((request, response) => {
         requests.push('domain-display:周报领域')
       } else if (request.method !== 'GET') throw new Error('Unexpected config method')
       data = { displayName: '周报领域' }
+    } else if (sidMode && url.pathname.endsWith('/props') && request.method === 'POST') {
+      const input = JSON.parse(body) as { sid: string; displayName: string }
+      if (input.sid !== 'tag_number' || input.displayName !== '位号') throw new Error('Unsafe new SID reached backend')
+      requests.push(`property:${input.sid}`)
+      data = input
+    } else if (sidMode && url.pathname.endsWith('/relation-types') && request.method === 'POST') {
+      const input = JSON.parse(body) as { sid: string; displayName: string }
+      if (input.sid !== 'belongs_to_unit' || input.displayName !== '属于单元') throw new Error('Unexpected relation definition')
+      relationDefinitions.push({ ...input, kind: 'RELATION' })
+      requests.push(`relation-type:${input.sid}`)
+      data = input
+    } else if (sidMode && url.pathname.endsWith('/schema/relations/effective') && request.method === 'GET') {
+      data = relationDefinitions
+    } else if (sidMode && url.pathname.endsWith('/relations') && request.method === 'POST') {
+      const input = JSON.parse(body) as { fromSid: string; toSid: string; relationSid: string }
+      if (input.fromSid !== 'legacy.Source' || input.toSid !== 'legacy.Target'
+        || !['属于单元', '兼容包含'].includes(input.relationSid)) throw new Error('Relationship label resolution or legacy SID changed')
+      requests.push(`edge:${input.relationSid}`)
+      data = { id: String(requests.length), label: input.relationSid }
     } else if (request.method === 'POST' && url.pathname === '/mdApi/v1/md/collections') {
       if (url.searchParams.get('name') !== '周报文档库') throw new Error('Unexpected document library')
       requests.push('library:周报文档库'); name = '周报文档库'
