@@ -23,6 +23,16 @@ export type G1brainLoginResult =
 export interface G1brainConnections {
   readonly baseUrl: string
   readonly tableBaseUrl: string
+  readonly clientId: string
+  readonly clientSecretConfigured: boolean
+}
+
+/** Write-only replacement secret; an empty value preserves the main-process secret. */
+export interface G1brainConnectionInput {
+  readonly baseUrl: string
+  readonly tableBaseUrl: string
+  readonly clientId: string
+  readonly clientSecret: string
 }
 
 /** Safe result of saving and applying connection preferences before sign-in. */
@@ -37,7 +47,7 @@ export interface WelcomeOperations {
   /** @returns effective service addresses, never credentials. */
   readConnections(): Promise<G1brainConnections>
   /** @param settings - proposed service addresses. @returns validation and application status. */
-  saveConnections(settings: G1brainConnections): Promise<G1brainConnectionResult>
+  saveConnections(settings: G1brainConnectionInput): Promise<G1brainConnectionResult>
   /** @param input - username and password delivered only to the Electron main process. @returns safe login status. */
   loginG1brain(input: G1brainLoginInput): Promise<G1brainLoginResult>
   /** @returns whether the login will validate against OAuth or use the local development session. */

@@ -1293,7 +1293,7 @@ export type Config = LocalConfig
 ## `@deepseek-ai/dsh-g1brain-integration`
 
 - `inject`: `tools` · `sessions` · `agents` · `approval` · `systemPrompt`
-- `source`: [`packages/g1brain/integration/src/index.ts:66`](../packages/g1brain/integration/src/index.ts)
+- `source`: [`packages/g1brain/integration/src/index.ts:67`](../packages/g1brain/integration/src/index.ts)
 
 ```ts config-catalog
 /** Deployment settings; credentials stay in the Host process. */
@@ -1312,6 +1312,8 @@ export interface Config {
   readonly tableTimeoutMs: number
   /** Maximum generated XLSX bytes accepted by the table service. */
   readonly tableMaxUploadBytes: number
+  /** Picture-management category ID, using the existing application's picture root by default. */
+  readonly resourceCategoryId: string
 }
 ```
 <!-- END GENERATED config-catalog:@deepseek-ai/dsh-g1brain-integration -->

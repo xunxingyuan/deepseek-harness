@@ -4105,6 +4105,14 @@ export const EVENT_API: readonly EventApiEntry[] = [
     parameters: [{ name: 'target', description: 'the resolved target about to be written.' }, { name: 'actor', description: 'the opaque tool-execution context the decider keys off.' }],
   },
   {
+    name: 'g1brain/auth-expired',
+    mode: 'emit',
+    signature: '\'g1brain/auth-expired\'(): void',
+    summary: 'The current G1brain credential expired or was rejected; Desktop must return to sign-in.',
+    description: 'The current G1brain credential expired or was rejected; Desktop must return to sign-in.',
+    parameters: [],
+  },
+  {
     name: 'goal/activation-changed',
     mode: 'emit',
     signature: '\'goal/activation-changed\'(payload: GoalActivationChanged): void',

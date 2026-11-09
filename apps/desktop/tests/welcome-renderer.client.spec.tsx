@@ -3,18 +3,20 @@ import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { Welcome } from '../src/client/WelcomePage.tsx'
 import { resolveDesktopLocale } from '../src/locale.ts'
-import type { G1brainLoginInput, G1brainLoginResult, G1brainConnections, G1brainConnectionResult, WelcomeApi } from '../src/welcome-api.ts'
+import type { G1brainLoginInput, G1brainLoginResult, G1brainConnectionInput, G1brainConnectionResult, WelcomeApi } from '../src/welcome-api.ts'
 
 afterEach(cleanup)
 
 function mount(language = 'zh-CN') {
   const loginG1brain = vi.fn<(input: G1brainLoginInput) => Promise<G1brainLoginResult>>()
     .mockResolvedValue({ ok: true, username: 'admin' })
-  const saveConnections = vi.fn(async (settings: G1brainConnections): Promise<G1brainConnectionResult> => ({ ok: true, settings }))
+  const saveConnections = vi.fn(async ({ clientSecret, ...settings }: G1brainConnectionInput): Promise<G1brainConnectionResult> =>
+    ({ ok: true, settings: { ...settings, clientSecretConfigured: Boolean(clientSecret) } }))
   const api: WelcomeApi = {
     ...resolveDesktopLocale(language), loginG1brain, g1brainMode: async () => 'local-dev',
     analyticsEnabled: async () => false,
-    readConnections: async () => ({ baseUrl: 'http://original.test:19091', tableBaseUrl: 'http://original.test:8090' }),
+    readConnections: async () => ({ baseUrl: 'http://original.test:19091', tableBaseUrl: 'http://original.test:8090',
+      clientId: 'lhzstp', clientSecretConfigured: true }),
     saveConnections,
   }
   render(<Welcome api={api} />)
@@ -26,6 +28,16 @@ function mount(language = 'zh-CN') {
 }
 
 describe('G1brain welcome form', () => {
+  it.each(['zh-CN', 'en'])('records the write-only client settings form in %s', async (language) => {
+    const view = mount(language)
+    fireEvent.click(screen.getByRole('button', { name: view.api.messages.g1brainConnectionSettings }))
+    await screen.findByLabelText(view.api.messages.g1brainClientId)
+    const copy = [view.api.messages.g1brainConnectionSettings, view.api.messages.g1brainConnectionDescription,
+      view.api.messages.g1brainServiceAddress, view.api.messages.g1brainTableAddress, view.api.messages.g1brainClientId,
+      view.api.messages.g1brainClientSecret, view.api.messages.g1brainClientSecretSaved, view.api.messages.g1brainClientHint,
+      view.api.messages.g1brainConnectionSave, view.api.messages.cancel, ''].join('\n')
+    await expect(copy).toMatchFileSnapshot(`./expected/welcome/connections-${language}.expected.txt`)
+  })
   it('edits service roots without carrying the login password into the connection form', async () => {
     const view = mount()
     fireEvent.change(view.password, { target: { value: 'private-password' } })
@@ -37,9 +49,24 @@ describe('G1brain welcome form', () => {
     fireEvent.change(screen.getByLabelText(view.api.messages.g1brainTableAddress), { target: { value: '' } })
     fireEvent.submit(document.getElementById('g1brain-connections-form')!)
     await screen.findByRole('status')
-    expect(view.saveConnections).toHaveBeenCalledExactlyOnceWith({ baseUrl: 'http://new.test:19091', tableBaseUrl: '' })
+    expect(view.saveConnections).toHaveBeenCalledExactlyOnceWith({ baseUrl: 'http://new.test:19091', tableBaseUrl: '',
+      clientId: 'lhzstp', clientSecret: '' })
     expect(screen.getByLabelText<HTMLInputElement>(view.api.messages.g1brainPassword).value).toBe('')
     expect(view.loginG1brain).not.toHaveBeenCalled()
+  })
+
+  it('uses a blank masked replacement field and clears a newly entered secret on cancel', async () => {
+    const view = mount()
+    fireEvent.click(screen.getByRole('button', { name: view.api.messages.g1brainConnectionSettings }))
+    const secret = await screen.findByLabelText<HTMLInputElement>(view.api.messages.g1brainClientSecret)
+    expect(secret.type).toBe('password')
+    expect(secret.value).toBe('')
+    expect(secret.placeholder).toBe(view.api.messages.g1brainClientSecretSaved)
+    fireEvent.change(secret, { target: { value: 'private-replacement' } })
+    fireEvent.click(screen.getByRole('button', { name: view.api.messages.cancel }))
+    fireEvent.click(screen.getByRole('button', { name: view.api.messages.g1brainConnectionSettings }))
+    expect((await screen.findByLabelText<HTMLInputElement>(view.api.messages.g1brainClientSecret)).value).toBe('')
+    expect(view.saveConnections).not.toHaveBeenCalled()
   })
 
   it('preserves invalid settings for correction and cancels without saving', async () => {

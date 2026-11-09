@@ -2,15 +2,18 @@
 
 [English](README.md) | 中文
 
+<a id="g1brain-branch-login"></a>
 ## G1brain 分支登录
 
-登录页的「连接设置」可修改 G1brain 服务根地址及可选的 Excel 数据服务根地址。桌面端接受不含账号密码、查询参数或片段的 HTTP(S) 地址，仅将地址保存到 Electron 用户数据目录下的 `g1brain-connections.json`。已保存的设置优先于环境变量地址和开发默认值；Excel 地址留空会明确关闭表格分流。保存后会在登录前重建宿主连接，不改变模型配置。保存只校验地址格式，不验证服务可用性或身份；开发登录仍不校验密码。在其他服务器选择目标时应准备新的 G1brain 会话，已有会话的目标名称不会被迁移。
+OAuth 模式下，主进程读取经认证的用户 ID，仅通过私有宿主启动环境传递 token、用户及有效期，并在进入工作区前替换宿主。有效期到期或认证请求返回 HTTP/业务码 401 时清除凭据并直接返回登录页，无需再次确认；本地会话仍保留。旧宿主的过期通知不会影响新的登录。开发登录不会生成真实 token，不能上传静态图片。
+
+登录页的「连接设置」可修改 G1brain 服务根地址、可选的 Excel 数据服务根地址、clientId 和 clientSecret。HTTP(S) 地址不能包含账号密码、查询参数或片段。clientId 默认采用 home 的 `lhzstp`，客户端密钥不打入安装包。密钥留空保留已有或外部配置的值，输入新值才会替换；页面只接收「已配置」状态，不回显密钥。Electron 用户数据目录下 `g1brain-connections.json` 的版本 2 保存地址、公开 clientId 和系统加密的密钥，并在支持的平台使用仅所有者权限；仍可读取版本 1 的纯地址配置。加密不可用时拒绝保存密钥，Linux 的 `basic_text` 后端不被接受。配置损坏或无法解密时直接报错，不回退为开发身份。已保存的地址优先于环境默认值，Excel 地址留空关闭表格分流。保存后在登录前重建宿主连接，不改变模型，仅校验格式而非服务可用性。切换服务器时应准备新会话，已有目标不会迁移。
 
 工作区侧栏增加「退出登录」，原生应用菜单也提供该操作。原生确认会提醒正在运行的工作将中断。退出会清除进程内登录状态、销毁旧工作区页面、停止并替换宿主，然后返回登录页。本地会话、文件、模型密钥和连接设置仍保留在磁盘上。这是桌面本地退出，不代表服务端令牌吊销，也不隔离共享的开发后端身份。
 
 开发和带有明确未签名测试标记的宿主还默认设置 `G1BRAIN_TABLE_BASE_URL=http://192.168.100.113:8090`，显式值可覆盖它。这会启用[按领域绑定的 Excel 分流](../../packages/g1brain/integration/README.zh.md#excel-data-routing)和仅表格准备模式。签名/OAuth 部署不会自动获得表格服务地址，须明确配置。
 
-本分支的原生欢迎窗口要求输入 G1brain 用户名和密码。`G1BRAIN_AUTH_MODE` 默认是 `local-dev`：两项均须填写，但密码不会发送到 G1brain 服务端，也不会由服务端校验；登录状态仅持续到桌面进程退出。欢迎窗口没有官方账号登录或 API Key 入口，设置页也不显示官方账号栏目；模型密钥仍可在工作区配置。日后启用真实 OAuth 校验时，设置 `G1BRAIN_AUTH_MODE=oauth` 和 `G1BRAIN_CLIENT_SECRET`；主进程还支持 `G1BRAIN_BASE_URL`、`G1BRAIN_CLIENT_ID`、`G1BRAIN_TENANT_ID` 和 `G1BRAIN_PUBLIC_KEY`。登录后的欢迎页渲染进程不会接收密码或客户端密钥。
+本分支的原生欢迎窗口要求输入 G1brain 用户名和密码。保存客户端密钥后会启用服务端校验的 OAuth 登录及静态图片上传。没有已保存的认证配置时，`G1BRAIN_AUTH_MODE` 默认是 `local-dev`：两项均须填写，但密码不被服务端校验，登录持续到进程退出。外部部署也可设置 `G1BRAIN_AUTH_MODE=oauth` 和 `G1BRAIN_CLIENT_SECRET`；主进程还支持 `G1BRAIN_BASE_URL`、`G1BRAIN_CLIENT_ID`、`G1BRAIN_TENANT_ID` 和 `G1BRAIN_PUBLIC_KEY`。欢迎窗口没有官方账号或 API Key 入口，设置页不显示官方账号栏目；模型密钥仍可在工作区配置。账号密码不持久化，也不会返回给欢迎页渲染进程。
 
 登录后，桌面版默认打开 [G1brain 工作台](../../packages/client/ui-g1brain/README.zh.md)，而不是空会话。桌面配置会启用 [G1brain 宿主集成](../../packages/g1brain/integration/README.zh.md)，普通会话也可使用只读发现与检索工具。本地开发桌面版和未签名测试安装包默认连接原有开发接口 `http://192.168.100.113:19091`，以 `developer` / `g1brain-web` 测试身份访问；三项均可通过环境变量覆盖。未签名安装包在应用清单中明确写入 `g1brainDevelopmentConnection: true`，使安装后的宿主获得这些默认值。这不会校验输入的用户名和密码。签名安装包与 OAuth 模式不会自动获得开发凭据。工作台将所选目标和目录绑定到新建 Harness 会话。非删除 G1brain 操作在此范围内无需额外确认；删除和替换导入须逐次取得 Harness 审批。进入会话本身不会写入 G1brain。
 
@@ -499,7 +502,7 @@ node apps/desktop/node_modules/pnpm/bin/pnpm.mjs --dir apps/desktop run test:upd
 
 仅向应用提供的 `dshOnboarding.hasApiKey()` preload 方法返回欢迎后端当前的 API Key 存在状态布尔值；原生登录与引导共用凭证发现逻辑，且只有受管理的应用主 frame 可以调用。
 
-当前 G1brain 欢迎页使用前述开发模式登录；输入的密码不是后端令牌，也不会进入工作区渲染进程。正式启用前，需要另行实现经服务端验证的登录与安全凭证传递。打包应用注册 `g1brainxdeepseek://open`，只显示窗口，不传递凭证。macOS 开发启动器在 `.desktop-build/development` 下准备经临时签名的 `G1brainXDeepSeek Dev.app`，嵌入 G1brain ICNS，在 Info.plist 中声明同一协议并注册到 Launch Services。它加载当前工作区，并记录选定的开发 home、浏览器数据路径和调试设置，以供冷启动使用。启动此应用会将其设为 `g1brainxdeepseek://` 默认处理程序；启动打包应用会重新注册打包版处理程序。生成的应用包不包含账号令牌，依赖工作区和已准备的运行环境继续存在。
+当前欢迎页使用 [G1brain 分支登录](#g1brain-branch-login)。打包应用注册 `g1brainxdeepseek://open`，只显示窗口，不传递凭证。macOS 开发启动器在 `.desktop-build/development` 下准备经临时签名的 `G1brainXDeepSeek Dev.app`，嵌入 G1brain ICNS，在 Info.plist 中声明同一协议并注册到 Launch Services。它加载当前工作区，并记录选定的开发 home、浏览器数据路径和调试设置，以供冷启动使用。启动此应用会将其设为 `g1brainxdeepseek://` 默认处理程序；启动打包应用会重新注册打包版处理程序。生成的应用包不包含账号令牌，依赖工作区和已准备的运行环境继续存在。
 
 账号失效并返回 Welcome 时，主进程保留一次性通知，直到渲染器通过所属窗口的 IPC 领取。重新加载 Welcome 不会重复提示；主动退登和冷启动不会生成该通知。
 

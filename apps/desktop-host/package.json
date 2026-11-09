@@ -25,6 +25,7 @@
     "@deepseek-ai/dsh-tool-workspace-dependencies": "workspace:*",
     "@deepseek-ai/dsh-skill-office": "workspace:*",
     "@deepseek-ai/dsh-deepseek-account": "workspace:*",
+    "@deepseek-ai/dsh-g1brain-integration": "workspace:*",
     "@deepseek-ai/dsh-workspace": "workspace:*"
   },
   "devDependencies": {

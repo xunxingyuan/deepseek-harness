@@ -19,9 +19,13 @@ export function Welcome({ api }: { api: WelcomeApi }) {
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [baseUrl, setBaseUrl] = useState('')
   const [tableBaseUrl, setTableBaseUrl] = useState('')
+  const [clientId, setClientId] = useState('')
+  const [clientSecret, setClientSecret] = useState('')
+  const [clientSecretConfigured, setClientSecretConfigured] = useState(false)
   const [notice, setNotice] = useState('')
   const busyRef = useRef(false)
   const mounted = useRef(true)
+  const isMounted = (): boolean => mounted.current
   const usernameInput = useRef<HTMLInputElement>(null)
   const addressInput = useRef<HTMLInputElement>(null)
 
@@ -42,6 +46,9 @@ export function Welcome({ api }: { api: WelcomeApi }) {
       if (!mounted.current) return
       setBaseUrl(settings.baseUrl)
       setTableBaseUrl(settings.tableBaseUrl)
+      setClientId(settings.clientId)
+      setClientSecret('')
+      setClientSecretConfigured(settings.clientSecretConfigured)
       setSettingsOpen(true)
     } catch (_failedRead: unknown) {
       if (mounted.current) setError(m.g1brainConnectionFailed)
@@ -55,9 +62,14 @@ export function Welcome({ api }: { api: WelcomeApi }) {
     setBusy(true)
     setError('')
     try {
-      const result = await api.saveConnections({ baseUrl: baseUrl.trim(), tableBaseUrl: tableBaseUrl.trim() })
+      const result = await api.saveConnections({ baseUrl: baseUrl.trim(), tableBaseUrl: tableBaseUrl.trim(),
+        clientId: clientId.trim(), clientSecret })
       if (!mounted.current) return
       if (result.ok) {
+        setClientSecret('')
+        const mode = await api.g1brainMode()
+        if (!isMounted()) return
+        setLocalMode(mode === 'local-dev')
         setSettingsOpen(false)
         setNotice(m.g1brainConnectionSaved)
       } else setError(result.reason === 'invalid-address' ? m.g1brainConnectionInvalid
@@ -102,7 +114,7 @@ export function Welcome({ api }: { api: WelcomeApi }) {
 
   return <>
     <div className="titlebar" aria-hidden="true" />
-    <main className="welcome" aria-labelledby={settingsOpen ? 'g1brain-connections-title' : 'g1brain-login-title'}>
+    <main className={settingsOpen ? 'welcome welcome-settings' : 'welcome'} aria-labelledby={settingsOpen ? 'g1brain-connections-title' : 'g1brain-login-title'}>
       <img className="brand" src="assets/welcome-brand.svg" alt="" aria-hidden="true" width="472" height="40" />
       {settingsOpen ? <form id="g1brain-connections-form" className="key-form connection-form" noValidate
         onSubmit={(event) => { void saveSettings(event) }} aria-busy={busy}>
@@ -122,6 +134,16 @@ export function Welcome({ api }: { api: WelcomeApi }) {
               aria-describedby="g1brain-address-hint" />
           </label>
           <p id="g1brain-address-hint" className="connection-hint">{m.g1brainAddressHint}</p>
+          <label className="key-field" htmlFor="g1brain-client-id"><span>{m.g1brainClientId}</span>
+            <input id="g1brain-client-id" type="text" autoComplete="off" spellCheck={false} required disabled={busy}
+              value={clientId} onChange={(event) => { setClientId(event.target.value); setError('') }} />
+          </label>
+          <label className="key-field" htmlFor="g1brain-client-secret"><span>{m.g1brainClientSecret}</span>
+            <input id="g1brain-client-secret" type="password" autoComplete="new-password" spellCheck={false} disabled={busy}
+              value={clientSecret} placeholder={clientSecretConfigured ? m.g1brainClientSecretSaved : ''}
+              onChange={(event) => { setClientSecret(event.target.value); setError('') }} aria-describedby="g1brain-client-hint" />
+          </label>
+          <p id="g1brain-client-hint" className="connection-hint">{m.g1brainClientHint}</p>
           {error && <p className="g1brain-error" role="alert">{error}</p>}
         </div>
       </form> : <form id="g1brain-login-form" className="key-form g1brain-form" noValidate onSubmit={(event) => { void submit(event) }} aria-busy={busy}>
@@ -150,7 +172,7 @@ export function Welcome({ api }: { api: WelcomeApi }) {
           <button className="primary" type="submit" form="g1brain-connections-form" disabled={busy}>
             {busy ? m.g1brainConnectionSaving : m.g1brainConnectionSave}
           </button>
-          <button className="secondary" type="button" disabled={busy} onClick={() => { setSettingsOpen(false); setError('') }}>{m.cancel}</button>
+          <button className="secondary" type="button" disabled={busy} onClick={() => { setClientSecret(''); setSettingsOpen(false); setError('') }}>{m.cancel}</button>
         </> : <>
           <button id="g1brain-login-submit" className="primary" type="submit" form="g1brain-login-form" disabled={busy}>
             {busy ? m.g1brainLoggingIn : m.g1brainLoginSubmit}

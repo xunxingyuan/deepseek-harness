@@ -1,0 +1,10 @@
+Connection settings
+Configure service addresses and G1brain sign-in. Model settings stay in the workspace.
+G1brain service address
+Excel data service address (optional)
+Client ID
+Client secret
+Configured · leave blank to keep
+The secret is encrypted on this device and is never shown again. Leave blank to keep it; enter a new value to replace it. Saving credentials enables server-verified sign-in.
+Save connection
+Cancel

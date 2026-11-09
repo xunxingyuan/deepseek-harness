@@ -2,8 +2,10 @@
 import { Buffer } from 'node:buffer'
 import { basename } from 'node:path'
 import type { WorkspaceScope } from '../legacy/bridge/scope.ts'
-import { extractMaterial } from '../legacy/bridge/material.ts'
+import { extractMaterialDocument } from '../legacy/bridge/material.ts'
+import type { MaterialImage } from '../legacy/bridge/images.ts'
 import type { G1BrainClient } from '../legacy/g1brain/client.ts'
+import { G1BrainError } from '../legacy/errors.ts'
 import type { G1brainSessionTarget } from '../types.ts'
 import { TableApiError, TableClient, type TableCollection } from './client.ts'
 import { planExcel, type SheetDecision } from './excel.ts'
@@ -17,6 +19,7 @@ interface Artifact {
   readonly uploadName: string
   readonly sheets: readonly string[]
   readonly bytes: Buffer
+  readonly images: readonly MaterialImage[]
 }
 
 interface MaterialPlan {
@@ -52,12 +55,16 @@ export class MaterialRouter {
       const sheets = planned?.sheets ?? []
       decisions.push({ path: file.relativePath, sourceHash, sheets })
       const tableBytes = planned?.tableBytes
-      const documentText = planned ? planned.documentText : await extractMaterial(bytes, file.extension, 50 * 1024 * 1024, 50 * 1024 * 1024)
+      const document = planned ? planned.documentText === undefined ? undefined
+        : { markdown: planned.documentText, images: planned.images }
+        : await extractMaterialDocument(bytes, file.extension, 50 * 1024 * 1024, 50 * 1024 * 1024)
+      const resolved = document === undefined ? undefined : await this.options.scope.resolveDocumentImages(path, document)
+      const documentText = resolved?.markdown
       if (tableBytes) {
         if (tableBytes.length > this.options.tables.options.maxUploadBytes) throw new Error(`${path} 的表格内容超过表格服务上传上限，请拆分文件`)
         const names = sheets.filter(sheet => sheet.route === 'table').map(sheet => sheet.name)
         artifacts.push({ key: digest(JSON.stringify(['excel-tables-v1', sourceHash, names])), kind: 'table', path: file.relativePath,
-          sourceHash, uploadName: `${basename(file.relativePath)}.${sourceHash.slice(0, 8)}.tables.xlsx`, sheets: names, bytes: tableBytes })
+          sourceHash, uploadName: `${basename(file.relativePath)}.${sourceHash.slice(0, 8)}.tables.xlsx`, sheets: names, bytes: tableBytes, images: [] })
         total += tableBytes.length
       }
       if (documentText !== undefined) {
@@ -66,9 +73,11 @@ export class MaterialRouter {
         const contents = Buffer.from(documentText, 'utf8')
         const uploadName = planned?.tableBytes ? `${file.relativePath}.notes.md`
           : /\.(?:md|markdown)$/iu.test(file.relativePath) ? file.relativePath : `${file.relativePath}.md`
-        artifacts.push({ key: digest(JSON.stringify(['material-documents-v1', sourceHash, names, library])), kind: 'document',
-          path: file.relativePath, sourceHash, uploadName, sheets: names, bytes: contents })
-        total += contents.length
+        const images = resolved?.images ?? []
+        artifacts.push({ key: digest(JSON.stringify(images.length ? ['material-documents-images-v1', sourceHash, names, library, images.map(image => image.key)]
+          : ['material-documents-v1', sourceHash, names, library])), kind: 'document',
+        path: file.relativePath, sourceHash, uploadName, sheets: names, bytes: contents, images })
+        total += contents.length + images.reduce((size, image) => size + image.bytes.length, 0)
       }
       if (excel && !tableBytes && documentText === undefined) throw new Error(`${path} 没有可导入的表格或文档内容`)
       if (total > 50 * 1024 * 1024) throw new Error('本批次提取内容超过 50 MiB，请分批导入')
@@ -131,6 +140,7 @@ export class MaterialRouter {
    */
   async upload(paths: readonly string[], signal?: AbortSignal): Promise<unknown> {
     const plan = await this.plan(paths)
+    if (plan.artifacts.some(item => item.images.length > 0)) this.options.documents.requireImageAuthentication()
     const table = plan.artifacts.some(item => item.kind === 'table') ? await this.collection(true, signal) : undefined
     const results: Array<Omit<ImportReceipt, 'result'> & { reused: boolean }> = []
     try {
@@ -153,11 +163,13 @@ export class MaterialRouter {
           } else {
             const library = this.options.target.documentLibraryName ?? this.options.target.createDocumentLibraryName
             if (!library) throw new Error('未绑定向量文档库')
-            const result = await this.options.documents.uploadMdFile(library, artifact.uploadName, artifact.bytes.toString('utf8'), signal)
+            const result = await this.options.documents.uploadMdMaterial(library, artifact.uploadName,
+              { markdown: artifact.bytes.toString('utf8'), images: artifact.images }, signal)
             receipt = { ...artifact, collectionId: library, jobIds: [], result }
           }
         } catch (error) {
-          if (error instanceof TableApiError && error.status !== undefined && error.status >= 400 && error.status < 500) {
+          if ((error instanceof TableApiError || error instanceof G1BrainError)
+            && error.status !== undefined && error.status >= 400 && error.status < 500) {
             await this.options.store.reject(artifact.key)
           }
           throw error

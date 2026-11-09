@@ -23,7 +23,7 @@ interface PlatformSessionEvent {
   readonly session: PlatformSession | null
 }
 
-type DesktopHostEvent = ReadyEvent | FatalEvent | PlatformSessionEvent | { readonly type: 'shutdown-complete' } | {
+type DesktopHostEvent = ReadyEvent | FatalEvent | PlatformSessionEvent | { readonly type: 'shutdown-complete' } | { readonly type: 'g1brain-auth-expired' } | {
   readonly type: 'update-tasks'
   readonly requestId: number
   readonly active: boolean
@@ -55,6 +55,7 @@ function isDesktopHostEvent(message: unknown): message is DesktopHostEvent {
   const candidate = message as Record<string, unknown>
   switch (candidate.type) {
     case 'shutdown-complete':
+    case 'g1brain-auth-expired':
       return true
     case 'ready':
       return typeof candidate.url === 'string'
@@ -165,6 +166,7 @@ export class DesktopHostProcess {
    *   `office-skills` resources fail Host startup.
    * @param packageManager - Bundled pnpm entry and Node launcher directory, scoped to package operations.
    * @param onPlatformSession - Private credential updates for embedded Platform views.
+   * @param onG1brainAuthExpired - Credential-free notification that G1brain requires sign-in again.
    */
   constructor(
     private readonly node: string,
@@ -177,6 +179,7 @@ export class DesktopHostProcess {
     private readonly packageManager?: { readonly pnpm: string; readonly nodeBin: string },
 
     private readonly onPlatformSession?: (session: PlatformSession | null) => void,
+    private readonly onG1brainAuthExpired?: () => void,
   ) {}
 
   /**
@@ -211,6 +214,7 @@ export class DesktopHostProcess {
       }
       if (message.type === 'ready') this.readyResolve({ url: message.url, injections: message.injections })
       else if (message.type === 'platform-session') this.onPlatformSession?.(message.session)
+      else if (message.type === 'g1brain-auth-expired') { if (!this.stopping) this.onG1brainAuthExpired?.() }
       else if (message.type === 'shutdown-complete') {
         if (this.stopping) this.shutdownCompleted = true
         else this.fail(new Error('dsh desktop host acknowledged an unrequested shutdown'))

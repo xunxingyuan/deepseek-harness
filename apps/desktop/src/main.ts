@@ -17,6 +17,7 @@ import {
   net,
   protocol,
   session,
+  safeStorage,
   shell,
   type IpcMainInvokeEvent,
   type MenuItemConstructorOptions,
@@ -41,7 +42,7 @@ import { openWelcomeWindow } from './welcome-window.ts'
 import { needsWelcome } from './welcome-api.ts'
 import { connectDesktopWelcome, type DesktopWelcomeBackend } from './welcome-backend.ts'
 import { G1brainAuth, g1brainDevelopmentHostEnvironment } from './g1brain-auth.ts'
-import { G1brainConnectionStore } from './g1brain-connections.ts'
+import { DEFAULT_G1BRAIN_CLIENT_ID, G1brainConnectionStore } from './g1brain-connections.ts'
 import { DesktopUpdateJournal } from './update-journal.ts'
 import { DesktopUpdatePreparationError } from './update-error.ts'
 import { DesktopUpdateSchedule, resolveDesktopUpdateScheduleConfig } from './update-schedule.ts'
@@ -329,16 +330,26 @@ async function main(): Promise<void> {
   const g1brainAuth = new G1brainAuth(
     () => hostEnvironment,
     (input, init) => net.fetch(input instanceof URL ? input.toString() : input, init),
+    () => { g1brainExpiryRequested = true; void returnToG1brainLogin().catch((error: unknown) => { reportFatal(error, 'main') }) },
   )
-  const connectionStore = new G1brainConnectionStore(join(app.getPath('userData'), 'g1brain-connections.json'))
+  const connectionStore = new G1brainConnectionStore(join(app.getPath('userData'), 'g1brain-connections.json'), {
+    available: () => safeStorage.isEncryptionAvailable()
+      && (process.platform !== 'linux' || safeStorage.getSelectedStorageBackend() !== 'basic_text'),
+    encrypt: value => safeStorage.encryptString(value),
+    decrypt: value => safeStorage.decryptString(value),
+  })
   const prepareHostEnvironment = async (): Promise<void> => {
     const inherited = await loginShell
     const saved = await connectionStore.load()
-    const mode = inherited.G1BRAIN_AUTH_MODE === 'oauth' ? 'oauth' : 'local-dev'
+    const mode = saved?.clientSecret || inherited.G1BRAIN_AUTH_MODE === 'oauth' ? 'oauth' : 'local-dev'
     hostEnvironment = { ...inherited, ...g1brainDevelopmentHostEnvironment(inherited, development, mode, manifest),
-      ...(saved ? { G1BRAIN_BASE_URL: saved.baseUrl, G1BRAIN_TABLE_BASE_URL: saved.tableBaseUrl } : {}) }
+      ...(saved ? { G1BRAIN_BASE_URL: saved.baseUrl, G1BRAIN_TABLE_BASE_URL: saved.tableBaseUrl,
+        G1BRAIN_CLIENT_ID: saved.clientId, G1BRAIN_CLIENT_SECRET: saved.clientSecret || inherited.G1BRAIN_CLIENT_SECRET } : {}),
+      G1BRAIN_AUTH_MODE: mode }
+    hostEnvironment = { ...hostEnvironment, ...g1brainAuth.hostEnvironment() }
   }
   let g1brainOperation: 'idle' | 'login' | 'connections' | 'logout' = 'idle'
+  let g1brainExpiryRequested = false
   let quitting = false
   let startup: Promise<void> | undefined
   let workspaceRecovery: Promise<void> | undefined
@@ -440,13 +451,16 @@ async function main(): Promise<void> {
     () => locale.id === 'zh-CN' ? 'zh_CN' : 'en_US', process.platform === 'win32' ? 'win32' : 'darwin')
   const backend = new DesktopBackendController((onFailure) => {
     const hostInspectPort = developmentHostInspectPort(development)
+    const g1brainGeneration = g1brainAuth.sessionGeneration
     const host = new DesktopHostProcess(resources.node, resources.dsh, activeProject,
       hostInspectPort, {
         ...hostEnvironment,
         DSH_CLIENT_VERSION: desktopClientVersion(),
       }, onFailure,
       primaryRuntime,
-      resources, (next) => { platformView.setSession(next) })
+      resources, (next) => { platformView.setSession(next) }, () => {
+        if (g1brainGeneration === g1brainAuth.sessionGeneration) g1brainAuth.expire()
+      })
     return {
       start: async () => {
         const ready = await host.start()
@@ -1137,17 +1151,22 @@ async function main(): Promise<void> {
       welcomeWindow = await openWelcomeWindow(locale, {
         g1brainMode: () => Promise.resolve(g1brainAuth.mode),
         readConnections: () => Promise.resolve({ baseUrl: hostEnvironment.G1BRAIN_BASE_URL ?? '',
-          tableBaseUrl: hostEnvironment.G1BRAIN_TABLE_BASE_URL ?? '' }),
+          tableBaseUrl: hostEnvironment.G1BRAIN_TABLE_BASE_URL ?? '',
+          clientId: hostEnvironment.G1BRAIN_CLIENT_ID || DEFAULT_G1BRAIN_CLIENT_ID,
+          clientSecretConfigured: Boolean(hostEnvironment.G1BRAIN_CLIENT_SECRET) }),
         saveConnections: async (settings) => {
           if (g1brainOperation !== 'idle' || enteredWorkspace || g1brainAuth.signedIn || quitting || isMandatory()
             || startup !== undefined || workspaceRecovery !== undefined || updateState.phase === 'installing') return { ok: false, reason: 'busy' }
           g1brainOperation = 'connections'
           try {
-            await connectionStore.save(settings)
+            await connectionStore.save(settings, hostEnvironment.G1BRAIN_CLIENT_SECRET)
             await restartG1brainHost()
-            return { ok: true, settings }
-          } catch (error) {
-            console.error('G1brain connection preferences could not be applied', error)
+            return { ok: true, settings: { baseUrl: hostEnvironment.G1BRAIN_BASE_URL ?? '',
+              tableBaseUrl: hostEnvironment.G1BRAIN_TABLE_BASE_URL ?? '',
+              clientId: hostEnvironment.G1BRAIN_CLIENT_ID || DEFAULT_G1BRAIN_CLIENT_ID,
+              clientSecretConfigured: Boolean(hostEnvironment.G1BRAIN_CLIENT_SECRET) } }
+          } catch (_failedPreferences: unknown) {
+            console.error('G1brain connection preferences could not be applied')
             return { ok: false, reason: 'unavailable' }
           } finally { g1brainOperation = 'idle' }
         },
@@ -1156,12 +1175,19 @@ async function main(): Promise<void> {
           g1brainOperation = 'login'
           try {
             const result = await g1brainAuth.login(username, password)
-            if (result.ok) await enterWorkspace()
+            if (result.ok) {
+              if (g1brainAuth.mode === 'oauth') await restartG1brainHost()
+              if (!g1brainAuth.signedIn) return { ok: false, reason: 'unavailable' }
+              await enterWorkspace()
+            }
             return result
           } catch (error) {
             g1brainAuth.signOut()
             throw error
-          } finally { g1brainOperation = 'idle' }
+          } finally {
+            g1brainOperation = 'idle'
+            if (g1brainExpiryRequested) void returnToG1brainLogin().catch((error: unknown) => { reportFatal(error, 'main') })
+          }
         },
         analytics: track,
         analyticsEnabled: () => Promise.resolve(analyticsEnabled),
@@ -1197,6 +1223,23 @@ async function main(): Promise<void> {
       await showWelcome()
       await restartG1brainHost()
       return true
+    } finally {
+      g1brainOperation = 'idle'
+      if (g1brainExpiryRequested) void returnToG1brainLogin().catch((error: unknown) => { reportFatal(error, 'main') })
+    }
+  }
+  const returnToG1brainLogin = async (): Promise<void> => {
+    if (!g1brainExpiryRequested || g1brainOperation !== 'idle' || quitting || shellInstallerOwnsQuit) return
+    g1brainOperation = 'logout'
+    g1brainExpiryRequested = false
+    try {
+      g1brainAuth.signOut()
+      enteredWorkspace = false
+      refreshApplicationMenu()
+      raiseAfterUpdate = false
+      mainWindow?.hide()
+      await showWelcome()
+      await restartG1brainHost()
     } finally { g1brainOperation = 'idle' }
   }
   ipcMain.handle(DESKTOP_IPC.g1brainSignOut, (event) => { assertProductSender(event); return signOutG1brain() })

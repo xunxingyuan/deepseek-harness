@@ -36,6 +36,12 @@ const sidCalls = [
   { name: 'g1brain_create_ontology_relation', args: { ...sidTarget, fromSid: 'legacy.Source', toSid: 'legacy.Target', relationSid: 'legacy.contains' } },
 ] as const
 
+const imageCalls = [
+  ...legacyCalls.slice(0, 7),
+  { name: 'g1brain_read_selected_file', args: { path: '中文 图片.docx' } },
+  { name: 'g1brain_upload_selected_files', args: { collectionName: '周报文档库', files: ['中文 图片.docx'] } },
+] as const
+
 class WorkflowAdapter extends LlmAdapter {
   override async resolveModel(provider: string, model: string) {
     return { provider, id: model, name: model }
@@ -44,7 +50,8 @@ class WorkflowAdapter extends LlmAdapter {
   async * stream(options: GenerateOptions): AsyncIterable<StreamChunk> {
     const tables = process.env.G1BRAIN_TEST_TABLES === '1'
     const sidMode = process.env.G1BRAIN_TEST_SID === '1'
-    const calls = sidMode ? sidCalls : tables ? tableCalls : legacyCalls
+    const imageMode = process.env.G1BRAIN_TEST_IMAGES === '1'
+    const calls = imageMode ? imageCalls : sidMode ? sidCalls : tables ? tableCalls : legacyCalls
     const tools = options.tools ?? []
     for (const call of calls) {
       if (!tools.some(tool => tool.name === call.name)) throw new Error(`G1brain workflow tool missing: ${call.name}`)
@@ -69,9 +76,10 @@ class WorkflowAdapter extends LlmAdapter {
     }
     if (tables && completed >= tableCalls.length && (!text.includes('215') || !text.includes('completed'))) throw new Error('Table evidence missing')
     if (sidMode && !text.includes('格式无效')) throw new Error('Unsafe SID was not rejected in the Session')
-    const answer = sidMode ? '已拒绝不合规新 SID，普通 SID 与旧关系 SID 均按显示名写入。'
-      : tables ? '已分流 Excel：数据表导入完成，说明进入文档库；SQL 总产量为 215。'
-        : '已读取中文材料并直接创建周报本体、领域和文档库；废弃属性经审批后删除。'
+    const answer = imageMode ? '已保留 Word 图片并上传，文档中的图片使用静态资源永久链接。'
+      : sidMode ? '已拒绝不合规新 SID，普通 SID 与旧关系 SID 均按显示名写入。'
+        : tables ? '已分流 Excel：数据表导入完成，说明进入文档库；SQL 总产量为 215。'
+          : '已读取中文材料并直接创建周报本体、领域和文档库；废弃属性经审批后删除。'
     yield { type: 'block-start', index: 0, blockType: 'text' }
     yield { type: 'text-delta', index: 0, text: answer }
     yield { type: 'block-end', index: 0, block: { type: 'text', text: answer } }

@@ -23,7 +23,7 @@ kind: "package-reference"
 <a id="use-this-package"></a>
 ## 使用
 
-本地开发桌面版或带有明确标记的未签名测试安装包会提供 `G1BRAIN_BASE_URL`（`http://192.168.100.113:19091`）、`G1BRAIN_LOCAL_USER_ID`（`developer`）、`G1BRAIN_LOCAL_CLIENT_ID`（`g1brain-web`）、`G1BRAIN_ALLOW_LOCAL_DEV=1` 和 `G1BRAIN_ALLOW_DEV_WRITES=1`；环境变量可覆盖这些默认值。宿主会沿用旧客户端的 `X-User-Id`、`X-Client-Id` 请求头；此测试身份与登录时输入的用户名无关。开发和未签名测试配置均启用写入，并不代表登录用户的真实授权。其他部署须自行配置服务地址和认证参数。OAuth 模式需设置 `G1BRAIN_ACCESS_TOKEN` 与 `G1BRAIN_CLIENT_SECRET`（可选设置 `G1BRAIN_CLIENT_ID`）；宿主会发送 Basic 认证与 `Blade-Auth`。`G1BRAIN_TENANT_ID` 默认是 `000000`。没有对应认证参数时，插件仍启用但报告 `configured: false`，目录调用会明确报错。桌面登录暂未向宿主服务传递登录身份或 OAuth 令牌。
+本地开发桌面版或带有明确标记的未签名测试安装包会提供 `G1BRAIN_BASE_URL`（`http://192.168.100.113:19091`）、`G1BRAIN_LOCAL_USER_ID`（`developer`）、`G1BRAIN_LOCAL_CLIENT_ID`（`g1brain-web`）、`G1BRAIN_ALLOW_LOCAL_DEV=1` 和 `G1BRAIN_ALLOW_DEV_WRITES=1`；环境变量可覆盖这些默认值。宿主会沿用旧客户端的 `X-User-Id`、`X-Client-Id` 请求头；此测试身份与登录时输入的用户名无关。开发和未签名测试配置均启用写入，并不代表登录用户的真实授权。其他部署须自行配置服务地址和认证参数。OAuth 模式需设置 `G1BRAIN_ACCESS_TOKEN` 与 `G1BRAIN_CLIENT_SECRET`（可选设置 `G1BRAIN_CLIENT_ID`）；宿主会发送 Basic 认证与 `Blade-Auth`。`G1BRAIN_TENANT_ID` 默认是 `000000`。没有对应认证参数时，插件仍启用但报告 `configured: false`，目录调用会明确报错。桌面 OAuth 登录通过私有宿主启动环境传递当前 token、经认证的用户 ID 和有效期，不向渲染进程传递凭据。独立运行的 OAuth 宿主上传静态图片时还须配置 G1BRAIN_USER_ID。桌面登录后会替换宿主；凭据到期或认证请求收到 HTTP/业务码 401 时返回登录页。
 
 工作台为新的顶层会话调用 `bindSession`。宿主校验所选目录就是该会话的工作区，并将完整目标保存于仅所有者可读写的私有绑定文件。限定范围工具只安装在对应智能体中；恢复智能体时重新读取绑定。工具执行时再次检查会话、目标、原始输入结构和目录范围。新增、修改、上传、文档处理任务提交/取消及追加式整包导入无需额外确认。删除和 `replace=true` 的整包导入须提供 `confirm=true`，并逐次取得 Harness 审批；此参数只表示删除意图，不代表用户已经批准。删除授权不共享、不复用。适用的非删除工具保留可选的旧版确认参数。上传仍须明确列出文件并逐一预检路径。旧版的 5 个智能体管理工具有意不开放。
 
@@ -34,6 +34,10 @@ kind: "package-reference"
 文件读取会提取 DOCX 段落与表格，以及按工作表分组的 XLSX/XLS 单元格。文本输入支持严格 UTF-8 或带 BOM 的 UTF-16；其他编码会报错，不会插入替换字符。文档上传将提取出的 UTF-8 Markdown 而非 Office 原始二进制发送到 MD API。非 Markdown 文档保留原后缀并追加 `.md`，因此 `report.docx` 与 `report.xlsx` 不会混淆。首次请求前须确保所有文件解析成功且上传名称不重复。原文件保持不变。文件大小上限约束 Office 解压总量；读取另有输出上限，不截断正文。开始上传后若 HTTP 请求失败，可能留下部分已上传文件。文档任务的 `collectionName` 是绑定文档库的 API 名称，不能使用本体集合、领域或显示名称。
 
 细粒度创建类、个体、属性和关系类型时，SID 必须匹配 `^[A-Za-z][A-Za-z0-9_]*$`，例如 `Instrument`、`belongs_to_unit`；不要拼接集合或领域前缀，中文名称填写 `displayName`。创建工具和 REST 客户端都会在请求前拒绝不合规 SID。已有引用（包括带点号 SID）在查询、更新和创建关系时保持原值。创建关系边必须传入生效关系定义的准确 SID；工具先解析其 `displayName || sid`，再按网页一致的规则提交。缺失定义、显示名重名、标签含点号或控制字符时不写入，也不会换名重试。创建关系定义或修改显示名时同样拒绝这些不可用标签。本体包导入仍遵循服务端包 ID 格式，不会自动改写包 ID 或已有引用。
+
+静态图片上传会保留 DOCX 正文图片、XLSX 工作表图片及 Markdown 相对路径图片。图片使用按内容生成的文件名，归入 `resourceCategoryId`（默认 `11`，即现有图片根分类）。上传用户 ID 来自当前真实登录，不使用默认管理员身份。支持 PNG、JPEG、GIF、WebP 和 BMP；其他格式明确报错。代码示例和普通链接不会被作为文件读取；相对图片经符号链接解析后仍须位于所选资料目录内。已有 HTTP(S) 图片链接保持原样，不主动抓取。
+
+导入器通过 `/resManagementAPI/res/upload` 上传图片，回读记录并匿名校验永久同源路径的完整字节，再替换 Markdown 中的图片引用。token 不进入 URL 或文档正文。图片缺失、上传失败或静态链接不可用时，不提交该文档的 Markdown。后续步骤失败可能留下已接受的图片；导入器不会删除可能被共享引用的资源，也不会自动重试结果不确定的 POST。当前静态链接按服务端策略匿名可读，尚未实现受控图片代理。已有文档不会自动修复，应审核后重新导入原件。即使 Excel 数据进入表格服务，含图片时也需要向量文档库保存图片说明。
 
 <a id="excel-data-routing"></a>
 ### Excel 数据分流
@@ -89,6 +93,8 @@ New class, instance, property, and relation-type SIDs must start with an ASCII l
 
 Use g1brain_read_selected_file to extract DOCX or Excel text and tables, not a raw text read of Office bytes. Document uploads extract UTF-8 Markdown before ingestion. Unsupported or encrypted files must be converted first; never upload garbled text as a successful extraction. Document uploads and processing tasks use the document library API name from the Session context, not the ontology collection name or a display name.
 
+Document uploads preserve embedded DOCX/XLSX pictures and relative Markdown image references through G1brain static resources. Use the upload tool rather than manually copying opaque image placeholders from file-read results. Images require a genuine G1brain login token, not the development identity. The tool uploads and verifies public static image URLs before submitting Markdown, never puts login tokens in image URLs, and stops on missing images or authentication expiry. Pictures are not OCR results. Legacy XLS pictures must first be saved as XLSX; image-bearing Excel sources need a vector document library even when their data sheets also route to tables.
+
 When g1brain_inspect_materials is available, inspect selected sources before importing. The upload tool routes regular Excel worksheets to the domain-bound table collection and explanatory sheets to the selected vector document library. Mixed workbooks are split by worksheet without changing the original. Only document uploads need MD/CHUNK tasks; table uploads return job IDs and require g1brain_get_table_imports to report completed. partial, failed, needs_input, and missing jobs are not success. Do not repeat an uncertain write. For table answers use g1brain_list_data_tables, g1brain_describe_data_table, and read-only SQL through g1brain_query_data_tables, not vector search arithmetic. Do not discard columns or invent missing header meanings. Same collection names alone do not authorize reusing another ontology domain’s table collection.
 
 In a prepared Session, inspect the sources and cite evidence. Execute requested creation, updates, uploads, and document processing within the bound resources without asking for extra confirmation. A request only for information or a plan is not a request to write data. Ask clarification questions only when the intended scope or business requirement is ambiguous.
@@ -125,9 +131,9 @@ Deletion and replacement imports that may remove existing content require approv
 - 开发模式登录不校验身份，也不授予后端写入权限。`developer` 是共享测试身份，仅应在开发服务使用。非删除写入会在所选目标范围内自动执行，请仔细选择目标。
 - 非删除操作自动执行，不代表模型生成的记录符合预期业务含义。应检查结果，发现偏离时停止执行。其他 Harness 工具（包括命令与文件操作）仍遵循各自的审批策略。
 - 提交文档任务只会安排服务端处理，并不会立即使文档可检索。须通过详情或等待工具确认 `SUCCESS` 后，才能认为切片或索引就绪。任务接口以当前 G1brain 网页为依据；插件未开放任务删除和清理。
-- Office 提取保留可读正文与表格，不保留页面版式、图表、图片或 OCR。Excel 公式使用已保存的缓存结果，或显示未计算的公式；不执行公式、宏或外部引用。旧版 DOC、PDF 与 PowerPoint 文件须先转换为支持的格式，才能由这些文件工具读取或上传。加密或损坏的 Office 文件会明确报错。文档库中已有乱码不会自动修复或覆盖。
+- Office 提取保留可读正文、表格和 DOCX/XLSX 嵌入的位图图片，不保留原始页面版式、页眉页脚、渲染图表或 OCR。旧版 XLS 图片须先转换为 XLSX。Excel 公式使用已保存的缓存结果，或显示未计算的公式；不执行公式、宏或外部引用。旧版 DOC、PDF 与 PowerPoint 文件须先转换为支持的格式，才能由这些文件工具读取或上传。加密或损坏的 Office 文件会明确报错。文档库中已有乱码不会自动修复或覆盖。
 - 会话绑定后目标固定；切换资源需要新建会话。全局发现与检索工具可查询宿主配置身份能够访问的任意集合，但不能修改数据。
-- 通过环境变量提供的 OAuth 凭据尚未与其他宿主插件及未来子进程隔离；在实现专用凭据传递前只能使用开发凭据。
+- OAuth 凭据通过私有宿主环境传递，尚未使用专用凭据代理；其他宿主插件仍可读取该环境。渲染进程隔离不代表跨插件凭据隔离，仅应在可信开发部署中使用。
 - Excel 分类采取保守规则，不推断业务结构。含义不明的工作表需走文档处理或人工整理。数字单元格在客户端读取前可能已经丢失精度，长编号和精确小数应保存为文本。表格集合不能代替生产身份认证、跨设备上传去重或自动逐行映射本体。
 
 <a id="dev-note"></a>

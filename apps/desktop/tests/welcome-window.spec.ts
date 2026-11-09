@@ -40,7 +40,7 @@ function createWindow() {
 beforeEach(() => { electron.create.mockReset(); electron.handlers.clear() })
 
 const operations = {
-  readConnections: async () => ({ baseUrl: 'http://server.test', tableBaseUrl: '' }),
+  readConnections: async () => ({ baseUrl: 'http://server.test', tableBaseUrl: '', clientId: 'lhzstp', clientSecretConfigured: true }),
   saveConnections: async () => ({ ok: false as const, reason: 'busy' as const }),
   loginG1brain: async () => ({ ok: true as const, username: 'admin' }),
   g1brainMode: async () => 'local-dev' as const,
@@ -175,9 +175,10 @@ describe('desktop welcome window', () => {
     await expect(save({ ...own, senderFrame: {} }, {})).rejects.toThrow('unowned frame')
     expect(await save(own, { baseUrl: 'http://secret@server.test', tableBaseUrl: '' })).toEqual({ ok: false, reason: 'invalid-address' })
     expect(saveConnections).not.toHaveBeenCalled()
-    expect(await save(own, { baseUrl: 'http://server.test/', tableBaseUrl: '' })).toEqual({ ok: false, reason: 'busy' })
-    expect(saveConnections).toHaveBeenCalledExactlyOnceWith({ baseUrl: 'http://server.test', tableBaseUrl: '' })
-    expect(await electron.handlers.get(WELCOME_IPC.connectionsRead)!(own)).toEqual({ baseUrl: 'http://server.test', tableBaseUrl: '' })
+    expect(await save(own, { baseUrl: 'http://server.test/', tableBaseUrl: '', clientId: 'lhzstp', clientSecret: '' })).toEqual({ ok: false, reason: 'busy' })
+    expect(saveConnections).toHaveBeenCalledExactlyOnceWith({ baseUrl: 'http://server.test', tableBaseUrl: '', clientId: 'lhzstp', clientSecret: '' })
+    expect(await electron.handlers.get(WELCOME_IPC.connectionsRead)!(own)).toEqual({ baseUrl: 'http://server.test', tableBaseUrl: '',
+      clientId: 'lhzstp', clientSecretConfigured: true })
   })
 
   it('shows the entry after logout only without a separately configured API key', () => {

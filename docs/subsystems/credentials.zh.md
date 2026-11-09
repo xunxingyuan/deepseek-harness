@@ -485,6 +485,25 @@ Local grant removal has completed.
 ```
 
 Source: [`packages/credentials/deepseek-account/src/index.ts`](../../packages/credentials/deepseek-account/src/index.ts)
+
+<a id="g1brain-events"></a>
+
+### `g1brain/*` events
+
+<a id="g1brainauth-expired--emit"></a>
+
+#### `g1brain/auth-expired` — emit
+
+The current G1brain credential expired or was rejected; Desktop must return to sign-in.
+
+```ts cordis-catalog
+/** The current G1brain credential expired or was rejected; Desktop must return to sign-in.
+ * @mode emit
+ */
+'g1brain/auth-expired'(): void
+```
+
+Source: [`packages/g1brain/integration/src/types.ts`](../../packages/g1brain/integration/src/types.ts)
 <!-- END GENERATED cordis-surface -->
 
 账号服务定义提供 getState、getProfile、getBalance、getUnnotifiedBonuses、ackBonusNotified、startSignIn、cancelSignIn、signOut、watch 及仅限 Host 的 resolveToken 和 getPlatformSession。平台提供者使用 AuthorizationFlow 和私有 GrantRecord 实现这些操作。AccountView 区分本地存在与服务器验证；尝试 ID 将取消绑定到单次本地流程。参见[账号包](../../packages/credentials/deepseek-account/README.zh.md)。

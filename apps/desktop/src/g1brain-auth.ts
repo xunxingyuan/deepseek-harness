@@ -48,10 +48,13 @@ export class G1brainAuth {
   private localAccount: string | undefined
   private expiresAt = 0
   private generation = 0
+  private userId: string | undefined
+  private expiryTimer: ReturnType<typeof setTimeout> | undefined
 
   constructor(
     private readonly environment: () => NodeJS.ProcessEnv,
     private readonly send: typeof fetch = fetch,
+    private readonly onExpired?: () => void,
   ) {}
 
   /** @returns whether this process still has a usable G1brain access token. */
@@ -63,12 +66,46 @@ export class G1brainAuth {
   /** @returns the explicit OAuth mode or the development-only local login mode. */
   get mode(): 'local-dev' | 'oauth' { return this.environment().G1BRAIN_AUTH_MODE === 'oauth' ? 'oauth' : 'local-dev' }
 
+  /** @returns an opaque process-local generation used to discard expiry events from a previous Host. */
+  get sessionGeneration(): number { return this.generation }
+
   /** Forget process-local credentials and invalidate any unfinished login response. */
   signOut(): void {
     this.generation++
     this.localAccount = undefined
     this.token = undefined
     this.expiresAt = 0
+    this.userId = undefined
+    if (this.expiryTimer !== undefined) clearTimeout(this.expiryTimer)
+    this.expiryTimer = undefined
+  }
+
+  /** Forget rejected credentials once and notify the shell to return to Welcome.
+   * @returns whether a real token was invalidated; repeated expiry notices do nothing.
+   */
+  expire(): boolean {
+    if (this.token === undefined) return false
+    this.signOut()
+    this.onExpired?.()
+    return true
+  }
+
+  /** Supply only the current process-local login to the private Host environment, never the renderer.
+   * @returns a scoped token, user identity and deadline; signed-out/development states clear inherited OAuth credentials.
+   */
+  hostEnvironment(): NodeJS.ProcessEnv {
+    const active = this.mode === 'oauth' && this.signedIn
+    return { G1BRAIN_ACCESS_TOKEN: active ? this.token : undefined, G1BRAIN_REFRESH_TOKEN: undefined,
+      G1BRAIN_USER_ID: active ? this.userId : undefined,
+      G1BRAIN_ACCESS_TOKEN_EXPIRES_AT: active && this.expiresAt > 0 ? String(this.expiresAt) : undefined }
+  }
+
+  private armExpiry(generation: number): void {
+    if (generation !== this.generation || this.token === undefined || this.expiresAt === 0) return
+    const remaining = this.expiresAt - Date.now()
+    if (remaining <= 0) { this.expire(); return }
+    this.expiryTimer = setTimeout(() => { this.armExpiry(generation) }, Math.min(remaining, 2147483647))
+    this.expiryTimer.unref()
   }
 
   /**
@@ -113,12 +150,36 @@ export class G1brainAuth {
       })
       if (!response.ok) return { ok: false, reason: response.status === 400 || response.status === 401 ? 'invalid-credentials' : 'unavailable' }
       const value: unknown = await response.json()
+      if (isRecord(value) && (value.code === 401 || value.code === '401')) return { ok: false, reason: 'invalid-credentials' }
       const payload = isRecord(value) && isRecord(value.data) ? value.data : value
       if (!isRecord(payload) || typeof payload.access_token !== 'string' || payload.access_token === '') return { ok: false, reason: 'unavailable' }
       if (generation !== this.generation) return { ok: false, reason: 'unavailable' }
+      let userId = typeof payload.user_id === 'string' ? payload.user_id
+        : isRecord(payload.user) && typeof payload.user.id === 'string' ? payload.user.id : undefined
+      if (!userId) {
+        const info = await this.send(new URL('api/blade-user/info', `${baseUrl.href.replace(/\/$/u, '')}/`), {
+          redirect: 'error', signal: AbortSignal.timeout(20_000),
+          headers: { Authorization: `Basic ${Buffer.from(`${clientId}:${secret}`, 'utf8').toString('base64')}`,
+            'Blade-Auth': `bearer ${payload.access_token}`, 'Tenant-Id': tenantId },
+        })
+        if (!info.ok) return { ok: false, reason: 'unavailable' }
+        const value: unknown = await info.json()
+        if (isRecord(value) && (value.code === 401 || value.code === '401')) return { ok: false, reason: 'invalid-credentials' }
+        const user = isRecord(value) && isRecord(value.data) ? value.data : undefined
+        if (!user || typeof user.id !== 'string' || !user.id) return { ok: false, reason: 'unavailable' }
+        userId = user.id
+      }
+      if (generation !== this.generation) return { ok: false, reason: 'unavailable' }
       this.token = payload.access_token
-      this.expiresAt = typeof payload.expires_in === 'number' && payload.expires_in > 30
-        ? Date.now() + (payload.expires_in - 30) * 1000 : 0
+      this.localAccount = undefined
+      this.userId = userId
+      if (this.expiryTimer !== undefined) clearTimeout(this.expiryTimer)
+      const lifetime = typeof payload.expires_in === 'number' && Number.isFinite(payload.expires_in) && payload.expires_in > 0
+        ? Math.max(1, payload.expires_in - 30) * 1000 : 0
+      this.expiresAt = lifetime > 0 ? Date.now() + lifetime : 0
+      if (lifetime > 0) {
+        this.armExpiry(generation)
+      }
       return { ok: true, username: account }
     } catch { return { ok: false, reason: 'unavailable' } }
   }

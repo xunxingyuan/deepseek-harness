@@ -9,7 +9,7 @@ import { SessionId } from '@deepseek-ai/dsh-session'
 import { runFixtureTurn } from '@deepseek-ai/dsh-loader-smoke'
 import type G1brainIntegration from '@deepseek-ai/dsh-g1brain-integration'
 import { bootProductionProfile } from '../../../../test-support/loader-smoke/tests/fixtures/production-profile.ts'
-import { chineseDocx, chineseWorkbook } from './materials.ts'
+import { chineseDocx, chineseWorkbook, fixturePng, imageDocx } from './materials.ts'
 import { tableWorkbook, workbookCell } from './table-workbooks.ts'
 import { Buffer } from 'node:buffer'
 import * as XLSX from 'xlsx'
@@ -20,13 +20,21 @@ const requests: string[] = []
 const failures: string[] = []
 const tableMode = process.env.G1BRAIN_TEST_TABLES === '1'
 const sidMode = process.env.G1BRAIN_TEST_SID === '1'
+const imageMode = process.env.G1BRAIN_TEST_IMAGES === '1'
+let pictureName: string | undefined
 const relationDefinitions = [{ kind: 'RELATION', sid: 'legacy.contains', displayName: '兼容包含' }]
 const tableCollections: Array<{ id: string; name: string; description: string }> = []
 const server = createServer((request, response) => {
   void (async () => {
     const url = new URL(request.url ?? '/', 'http://localhost')
     const tableRequest = tableMode && (url.pathname.startsWith('/api/') || url.pathname === '/mcp/')
-    if (!tableRequest && (request.headers['x-user-id'] !== 'developer' || request.headers['x-client-id'] !== 'g1brain-web')) {
+    if (imageMode && url.pathname === '/static/test.png') {
+      if (request.headers['blade-auth'] || request.headers.authorization) throw new Error('Image URL must not receive credentials')
+      response.writeHead(200, { 'Content-Type': 'image/png' })
+      response.end(fixturePng); return
+    }
+    if (imageMode && request.headers['blade-auth'] !== 'bearer fixture-token') throw new Error('G1brain login token missing')
+    if (!imageMode && !tableRequest && (request.headers['x-user-id'] !== 'developer' || request.headers['x-client-id'] !== 'g1brain-web')) {
       throw new Error('Development request identity missing')
     }
     if (tableRequest && request.headers['x-user-id']) throw new Error('G1brain identity leaked to the table service')
@@ -79,7 +87,18 @@ const server = createServer((request, response) => {
     }
     let name: string | undefined
     let data: unknown
-    if (request.method === 'POST' && url.pathname === '/kgApi/v1/gs/collections') {
+    if (imageMode && url.pathname.endsWith('/res/searchByKeyword')) {
+      data = { records: pictureName ? [{ name: pictureName, path: '/static/test.png' }] : [] }
+    } else if (imageMode && request.method === 'POST' && url.pathname.endsWith('/res/upload')) {
+      if (url.searchParams.get('userId') !== 'fixture-user') throw new Error('Wrong resource upload user')
+      const form = await new Response(bytes, { headers: { 'Content-Type': request.headers['content-type'] ?? '' } }).formData()
+      const file = form.get('files')
+      if (!(file instanceof File) || form.get('id') !== '11' || form.get('fileType') !== 'picture'
+        || !Buffer.from(await file.arrayBuffer()).equals(fixturePng)) throw new Error('Embedded image was not preserved')
+      pictureName = file.name
+      requests.push('static-picture-upload')
+      data = true
+    } else if (request.method === 'POST' && url.pathname === '/kgApi/v1/gs/collections') {
       const input: unknown = JSON.parse(body)
       if (typeof input !== 'object' || input === null || !('name' in input) || input.name !== 'col_7c120e3057d72928f5491e86') throw new Error('Unexpected collection')
       requests.push('collection:col_7c120e3057d72928f5491e86'); name = input.name
@@ -123,7 +142,9 @@ const server = createServer((request, response) => {
       if (!(file instanceof File)) throw new Error('Expected UTF-8 Markdown file')
       const content = await file.text()
       const expected = file.name === '中文 Word.docx.md' ? '生产周报：中文正文' : file.name === '混合数据.xlsx.notes.md' ? '这是说明正文' : '二号炉例行检查'
-      if (!['中文 Word.docx.md', '中文 Excel.xlsx.md', '混合数据.xlsx.notes.md'].includes(file.name) || !content.includes(expected)
+      if (imageMode && (!pictureName || !content.includes('/static/test.png') || content.includes('g1brain-image:')
+        || content.includes('fixture-token'))) throw new Error('Image URL or token isolation failed in Markdown')
+      if (!['中文 Word.docx.md', '中文 Excel.xlsx.md', '混合数据.xlsx.notes.md', '中文 图片.docx.md'].includes(file.name) || (!imageMode && !content.includes(expected))
         || content.includes('\ufffd') || content.startsWith('PK')) throw new Error('Office upload was not extracted into Chinese Markdown')
       if (file.name === '混合数据.xlsx.notes.md' && content.includes('9007199254740993')) throw new Error('Data sheet leaked to vector library')
       requests.push(`upload:${file.name}`)
@@ -154,11 +175,18 @@ try {
   process.env.G1BRAIN_ALLOW_DEV_WRITES = '1'
   process.env.G1BRAIN_LOCAL_USER_ID = 'developer'
   process.env.G1BRAIN_LOCAL_CLIENT_ID = 'g1brain-web'
+  if (imageMode) {
+    process.env.G1BRAIN_AUTH_MODE = 'oauth'
+    process.env.G1BRAIN_CLIENT_SECRET = 'fixture-secret'
+    process.env.G1BRAIN_ACCESS_TOKEN = 'fixture-token'
+    process.env.G1BRAIN_USER_ID = 'fixture-user'
+  }
   const materials = join(process.cwd(), '中文 周报材料')
   await mkdir(materials)
   await writeFile(join(materials, '第一张表.md'), '# 第一张表\nG1BRAIN_WINDOWS_MATERIAL_EVIDENCE\n')
   await writeFile(join(materials, '中文 Word.docx'), chineseDocx())
   await writeFile(join(materials, '中文 Excel.xlsx'), chineseWorkbook())
+  if (imageMode) await writeFile(join(materials, '中文 图片.docx'), imageDocx())
   if (tableMode) await writeFile(join(materials, '混合数据.xlsx'), tableWorkbook())
   // Built plugins must work without the source checkout's build-only spreadsheet dependency.
   if (process.env.DSH_EXAMPLE_MODE === 'lib') {

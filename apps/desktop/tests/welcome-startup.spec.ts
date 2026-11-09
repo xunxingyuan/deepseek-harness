@@ -5,7 +5,7 @@ import { afterEach, expect, it, vi } from 'vitest'
 import type { BrowserWindowConstructorOptions } from 'electron'
 import type { DesktopLocale } from '../src/locale.ts'
 import type { AccountView } from '@deepseek-ai/dsh-deepseek-account/types'
-import type { WelcomeOperations } from '../src/welcome-api.ts'
+import type { G1brainConnectionInput, WelcomeOperations } from '../src/welcome-api.ts'
 import { DESKTOP_IPC } from '../src/ipc.ts'
 
 const state = vi.hoisted(() => ({
@@ -31,8 +31,9 @@ const state = vi.hoisted(() => ({
   closeWelcome: vi.fn(),
   destroyWorkspace: vi.fn(),
   confirm: vi.fn(async () => ({ response: 0, checkboxChecked: false })),
-  savedConnections: undefined as { baseUrl: string; tableBaseUrl: string } | undefined,
+  savedConnections: undefined as G1brainConnectionInput | undefined,
   hostEnvironments: [] as NodeJS.ProcessEnv[],
+  g1brainExpiries: [] as Array<(() => void) | undefined>,
   welcomeLocale: undefined as DesktopLocale | undefined,
   preference: 'zh',
   hasApiKey: false,
@@ -110,9 +111,9 @@ vi.mock('../src/tray.ts', () => ({ DesktopTray: class { relabel() {} dispose() {
 vi.mock('../src/paths.ts', async importOriginal => ({
   ...await importOriginal<typeof import('../src/paths.ts')>(), resolveDesktopPaths: () => ({ profile: '/profile' }),
 }))
-vi.mock('../src/g1brain-connections.ts', () => ({ G1brainConnectionStore: class {
+vi.mock('../src/g1brain-connections.ts', () => ({ DEFAULT_G1BRAIN_CLIENT_ID: 'lhzstp', G1brainConnectionStore: class {
   async load() { return state.savedConnections }
-  async save(settings: { baseUrl: string; tableBaseUrl: string }) { state.savedConnections = settings }
+  async save(settings: G1brainConnectionInput) { state.savedConnections = settings }
 } }))
 vi.mock('../src/login-shell-environment.ts', async importOriginal => ({
   ...await importOriginal<typeof import('../src/login-shell-environment.ts')>(),
@@ -125,8 +126,10 @@ vi.mock('../src/project-manager.ts', () => ({ DesktopProjectManager: class {
 vi.mock('../src/host-process.ts', async importOriginal => ({
   ...await importOriginal<typeof import('../src/host-process.ts')>(),
   DesktopHostProcess: class {
-    constructor(_node: string, _runtime: string, _project: string, _port: unknown, environment: NodeJS.ProcessEnv) {
+    constructor(_node: string, _runtime: string, _project: string, _port: unknown, environment: NodeJS.ProcessEnv,
+      _failure?: unknown, _primary?: unknown, _manager?: unknown, _platform?: unknown, g1brainExpired?: () => void) {
       state.hostEnvironments.push(environment)
+      state.g1brainExpiries.push(g1brainExpired)
     }
     start = state.startHost
     stop = state.stopHost
@@ -186,6 +189,59 @@ afterEach(() => {
   vi.unstubAllEnvs()
   vi.unstubAllGlobals()
   vi.restoreAllMocks()
+})
+
+it.each(['deadline', 'server-401', 'saved-credentials'])('hands the signed-in token to the Host and returns to G1brain login on %s', async (reason) => {
+  vi.resetModules()
+  vi.clearAllMocks()
+  vi.useFakeTimers()
+  state.operations = undefined
+  state.savedConnections = undefined
+  state.hostEnvironments.length = 0
+  state.g1brainExpiries.length = 0
+  state.beforeRead.mockResolvedValue(undefined)
+  state.beforeWelcome.mockResolvedValue(undefined)
+  vi.stubEnv('DSH_CLIENT_VERSION', '1.2.3')
+  vi.stubEnv('DSH_DESKTOP_DEV_PROJECT_DIR', '/development-profile')
+  vi.stubEnv('DSH_DESKTOP_NODE_BINARY', '/runtime/node')
+  vi.stubEnv('DSH_DESKTOP_PNPM_ENTRY', '/runtime/pnpm')
+  vi.stubEnv('DSH_DESKTOP_DSH_DIR', '/runtime/dsh')
+  vi.stubEnv('DSH_DESKTOP_PRIMARY_RUNTIME_DIR', '/runtime/primary-runtime')
+  vi.stubEnv('DSH_DESKTOP_OPEN_DEVTOOLS', '0')
+  vi.stubEnv('DSH_DESKTOP_MANDATORY_UPDATE_CONFIG', undefined)
+  vi.stubEnv('G1BRAIN_AUTH_MODE', 'oauth')
+  vi.stubEnv('G1BRAIN_CLIENT_SECRET', 'fixture-secret')
+  if (reason === 'saved-credentials') {
+    vi.stubEnv('G1BRAIN_AUTH_MODE', undefined)
+    vi.stubEnv('G1BRAIN_CLIENT_SECRET', undefined)
+    state.savedConnections = { baseUrl: 'http://configured.test:19091', tableBaseUrl: '',
+      clientId: 'configured-client', clientSecret: 'saved-private-secret' }
+  }
+  const { net } = await import('electron')
+  vi.spyOn(net, 'fetch').mockResolvedValue(Response.json({ access_token: 'private-fixture-token', user_id: 'user-1', expires_in: 32 }))
+  await import('../src/main.ts')
+  await vi.waitFor(() => { expect(state.operations).toBeDefined() })
+  if (reason === 'saved-credentials') {
+    expect(await state.operations!.g1brainMode()).toBe('oauth')
+    expect(await state.operations!.readConnections()).toEqual({ baseUrl: 'http://configured.test:19091', tableBaseUrl: '',
+      clientId: 'configured-client', clientSecretConfigured: true })
+  }
+  const result = await state.operations!.loginG1brain({ username: 'alice', password: 'fixture-password' })
+  expect(result).toEqual({ ok: true, username: 'alice' })
+  expect(JSON.stringify(result)).not.toContain('private-fixture-token')
+  expect(state.startHost).toHaveBeenCalledTimes(2)
+  expect(state.hostEnvironments[1]).toMatchObject({ G1BRAIN_ACCESS_TOKEN: 'private-fixture-token', G1BRAIN_USER_ID: 'user-1' })
+  state.g1brainExpiries[0]?.()
+  await vi.advanceTimersByTimeAsync(0)
+  expect(state.startHost).toHaveBeenCalledTimes(2)
+  const shownBefore = state.beforeWelcome.mock.calls.length
+  if (reason !== 'deadline') state.g1brainExpiries[1]?.()
+  else await vi.advanceTimersByTimeAsync(2001)
+  await vi.waitFor(() => { expect(state.startHost).toHaveBeenCalledTimes(3) })
+  expect(state.beforeWelcome).toHaveBeenCalledTimes(shownBefore + 1)
+  expect(state.hostEnvironments[2]?.G1BRAIN_ACCESS_TOKEN).toBeUndefined()
+  expect(state.hostEnvironments[2]?.G1BRAIN_USER_ID).toBeUndefined()
+  expect(state.confirm).not.toHaveBeenCalled()
 })
 
 it.each([false, true])('opens the G1brain welcome and enters after local login (Windows update=%s)', async (updated) => {
@@ -283,7 +339,7 @@ it.each([false, true])('opens the G1brain welcome and enters after local login (
   expect(state.beforeWelcome).toHaveBeenCalledTimes(welcomeCount)
   expect(state.openDevTools).not.toHaveBeenCalled()
 
-  expect(await state.operations!.saveConnections({ baseUrl: 'http://new-server.test:19091', tableBaseUrl: '' }))
+  expect(await state.operations!.saveConnections({ baseUrl: 'http://new-server.test:19091', tableBaseUrl: '', clientId: 'lhzstp', clientSecret: '' }))
     .toEqual({ ok: false, reason: 'busy' })
   const signOut = state.handlers.get(DESKTOP_IPC.g1brainSignOut)!
   expect(() => signOut({ ...event, senderFrame: { url: 'dsh-app://app/' } })).toThrow('unowned renderer')
@@ -296,12 +352,13 @@ it.each([false, true])('opens the G1brain welcome and enters after local login (
   expect(state.stopHost).toHaveBeenCalledOnce()
   expect(state.startHost).toHaveBeenCalledTimes(2)
   expect(() => signOut(event)).toThrow('unowned renderer')
-  const settings = { baseUrl: 'http://new-server.test:19091', tableBaseUrl: '' }
-  expect(await state.operations!.saveConnections(settings)).toEqual({ ok: true, settings })
+  const settings = { baseUrl: 'http://new-server.test:19091', tableBaseUrl: '', clientId: 'lhzstp', clientSecret: '' }
+  const publicSettings = { baseUrl: settings.baseUrl, tableBaseUrl: '', clientId: 'lhzstp', clientSecretConfigured: false }
+  expect(await state.operations!.saveConnections(settings)).toEqual({ ok: true, settings: publicSettings })
   expect(state.savedConnections).toEqual(settings)
   expect(state.hostEnvironments.at(-1)).toMatchObject({ G1BRAIN_BASE_URL: settings.baseUrl, G1BRAIN_TABLE_BASE_URL: '' })
   expect(state.startHost).toHaveBeenCalledTimes(3)
-  expect(await state.operations!.readConnections()).toEqual(settings)
+  expect(await state.operations!.readConnections()).toEqual(publicSettings)
   expect(await state.operations!.loginG1brain({ username: 'second-user', password: 'development-password' }))
     .toEqual({ ok: true, username: 'second-user' })
   expect(state.closeWelcome).toHaveBeenCalledTimes(2)

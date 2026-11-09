@@ -14,6 +14,8 @@ export interface G1BrainConfig {
   timeoutMs: number
   localUserId: string
   localClientId: string
+  resourceCategoryId?: string
+  onAuthExpired?: () => void
 }
 
 /** OAuth token and associated tenant identity. */
@@ -24,6 +26,8 @@ export interface AuthTokens {
   tenantId: string
   expiresIn?: number
   issuedAt: number
+  userId?: string
+  expiresAt?: number
   user?: Record<string, unknown>
 }
 

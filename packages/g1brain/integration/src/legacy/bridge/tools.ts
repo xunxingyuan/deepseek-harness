@@ -226,8 +226,8 @@ export function createG1BrainTools(context: BridgeContext): ToolDefinition[] {
     {
       name: 'g1brain_upload_selected_files',
       description: context.uploadMaterials
-        ? '自动导入明确选择的文件。Excel 的规整数据工作表进入当前 domain 对应的表格集合，说明性工作表及其他文档提取为 UTF-8 Markdown 上传所选向量文档库；混合工作簿按工作表分流，原件不变。先用 g1brain_inspect_materials 预检。表格分支轮询 g1brain_get_table_imports；仅文档分支需要 MD/CHUNK 处理。重复导入会复用回执；网络结果不确定时先核对，不自动重传。纯表格会话可省略 collectionName。'
-        : '将明确列出的文件先提取为 UTF-8 Markdown，再上传到绑定文档库；支持文本、DOCX、XLSX、XLS。非 Markdown 文件保留原文件名并追加 .md；原文件不变。所有文件均解析成功且上传名称不冲突后才开始上传，不会将 Office 二进制当正文上传。上传后须提交 MD 切片任务，再提交 CHUNK 关键词、向量化或索引任务；上传本身不代表可检索。',
+        ? '自动导入明确选择的文件。Excel 的规整数据工作表进入当前 domain 对应的表格集合，说明性工作表及其他文档提取为 UTF-8 Markdown 上传所选向量文档库；混合工作簿按工作表分流，原件不变。DOCX/XLSX 嵌入图片和 Markdown 相对路径图片先上传静态资源并替换永久链接，需要真实登录 token；有图片的 Excel 也须选择向量文档库。先用 g1brain_inspect_materials 预检。表格分支轮询 g1brain_get_table_imports；仅文档分支需要 MD/CHUNK 处理。重复导入会复用回执；网络结果不确定时先核对，不自动重传。纯表格会话可省略 collectionName。'
+        : '将明确列出的文件先提取为 UTF-8 Markdown，再上传到绑定文档库；支持文本、DOCX、XLSX、XLS。DOCX/XLSX 嵌入图片和 Markdown 相对路径图片先使用真实登录 token 上传静态资源，再将永久链接写入 Markdown；图片缺失、越界、格式不支持或上传失败时不会提交缺图文档。旧版 XLS 图片须先另存为 XLSX。非 Markdown 文件保留原文件名并追加 .md；原文件不变。所有文件均解析成功且上传名称不冲突后才开始上传。上传后须提交 MD/CHUNK 处理；上传本身不代表可检索。',
       inputSchema: {
         type: 'object',
         properties: {
@@ -244,9 +244,11 @@ export function createG1BrainTools(context: BridgeContext): ToolDefinition[] {
           if (context.uploadMaterials) return text(await context.uploadMaterials(requested, signal))
           const collectionName = requiredString(args, 'collectionName')
           const selected = await scope().prepareUploads(requested)
+          if (selected.some(file => file.images.length > 0)) client.requireImageAuthentication()
           const results: Array<{ path: string; uploadName: string; result: unknown }> = []
           for (const file of selected) {
-            const result = await client.uploadMdFile(collectionName, file.uploadName, file.contents)
+            const result = await client.uploadMdMaterial(collectionName, file.uploadName,
+              { markdown: file.contents, images: file.images }, signal)
             results.push({ path: file.path, uploadName: file.uploadName, result })
           }
           return text({ uploaded: results.length, results })

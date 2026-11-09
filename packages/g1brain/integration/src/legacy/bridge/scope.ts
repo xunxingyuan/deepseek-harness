@@ -1,9 +1,10 @@
 import { realpath, readdir, readFile, stat } from 'node:fs/promises'
 import { Buffer } from 'node:buffer'
-import { extname, isAbsolute, relative, resolve, sep } from 'node:path'
+import { dirname, extname, isAbsolute, relative, resolve, sep } from 'node:path'
 import type { ScopeFile } from '../types.ts'
 import { ScopeError } from '../errors.ts'
-import { extractMaterial } from './material.ts'
+import { extractMaterial, extractMaterialDocument } from './material.ts'
+import { checkedDocument, markdownImages, type MaterialDocument, type MaterialImage } from './images.ts'
 
 const DEFAULT_EXTENSIONS = new Set([
   '.md',
@@ -99,19 +100,46 @@ class WorkspaceScopeImpl {
     return { file, bytes }
   }
 
-  async prepareUploads(paths: string[]): Promise<Array<{ path: string; uploadName: string; contents: string }>> {
+  /** Resolve Markdown's local images within the same selected Workspace, never arbitrary files or remote URLs.
+   * @param path - source document's Workspace-relative path.
+   * @param document - extracted text and any embedded Office pictures.
+   * @returns preflighted Markdown and deduplicated images; missing or escaped references throw before upload.
+   */
+  async resolveDocumentImages(path: string, document: MaterialDocument): Promise<MaterialDocument> {
+    const source = await this.resolveExisting(path)
+    const resolved = await markdownImages(document.markdown, async (reference) => {
+      if (isAbsolute(reference) || reference.includes('\0')) throw new ScopeError('图片必须使用资料目录内的相对路径', reference)
+      const target = relative(this.rootPath, resolve(dirname(source), reference))
+      const canonical = await this.resolveExisting(target)
+      const info = await stat(canonical)
+      if (!info.isFile() || info.size > this.options.maxFileBytes) throw new ScopeError('图片不是普通文件或超过大小上限', reference)
+      const bytes = await readFile(canonical)
+      if (bytes.length > this.options.maxFileBytes) throw new ScopeError('图片超过大小上限', reference)
+      return bytes
+    }, this.options.maxFileBytes, new Set(document.images.map(image => image.key)))
+    const images = new Map([...document.images, ...resolved.images].map(image => [image.key, image]))
+    if (images.size > this.options.maxFiles) throw new ScopeError('图片数量超过资料文件数量上限', path)
+    return checkedDocument({ markdown: resolved.markdown, images: [...images.values()] }, this.options.maxFileBytes)
+  }
+
+  async prepareUploads(paths: string[]): Promise<
+    Array<{ path: string; uploadName: string; contents: string; images: readonly MaterialImage[] }>
+  > {
     const files = []
     const names = new Set<string>()
     let total = 0
     for (const path of paths) {
-      const contents = await this.read(path, this.options.maxFileBytes)
+      const { file, bytes } = await this.readBytes(path)
+      const extracted = await extractMaterialDocument(bytes, file.extension, this.options.maxFileBytes, this.options.maxFileBytes)
+      const document = await this.resolveDocumentImages(path, extracted)
+      const contents = document.markdown
       const canonical = relative(this.rootPath, await this.resolveExisting(path)).replaceAll('\\', '/')
       const uploadName = /\.(?:md|markdown)$/i.test(canonical) ? canonical : `${canonical}.md`
       if (names.has(uploadName)) throw new ScopeError(`上传名称重复：${uploadName}`, path)
       names.add(uploadName)
-      total += Buffer.byteLength(contents, 'utf8')
+      total += Buffer.byteLength(contents, 'utf8') + document.images.reduce((size, image) => size + image.bytes.length, 0)
       if (total > this.options.maxFileBytes) throw new ScopeError('本批次正文总量超过文件大小上限；请分批上传', path)
-      files.push({ path, uploadName, contents })
+      files.push({ path, uploadName, contents, images: document.images })
     }
     return files
   }

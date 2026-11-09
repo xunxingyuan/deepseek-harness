@@ -57,6 +57,7 @@ const WORKFLOW_GUIDANCE = [
   'Before writing in a prepared Session, call g1brain_context and use its bound collection and domain API names for creation and all later references. Display names are labels only; never translate or regenerate bound identifiers. System domains such as _schema and _shared are not business write targets.',
   'New class, instance, property, and relation-type SIDs must start with an ASCII letter and contain only ASCII letters, digits, or underscores, for example Instrument or belongs_to_unit. Do not prefix a SID with the collection or domain, and do not use dots, hyphens, spaces, or Chinese characters. Put human-readable names in displayName. Preserve existing SIDs exactly when querying, updating, or referencing them. To create an edge, pass the exact SID from the effective relation definitions, not a display name; the tool resolves the Web-compatible edge label and refuses ambiguous names or labels containing dots.',
   'Use g1brain_read_selected_file to extract DOCX or Excel text and tables, not a raw text read of Office bytes. Document uploads extract UTF-8 Markdown before ingestion. Unsupported or encrypted files must be converted first; never upload garbled text as a successful extraction. Document uploads and processing tasks use the document library API name from the Session context, not the ontology collection name or a display name.',
+  'Document uploads preserve embedded DOCX/XLSX pictures and relative Markdown image references through G1brain static resources. Use the upload tool rather than manually copying opaque image placeholders from file-read results. Images require a genuine G1brain login token, not the development identity. The tool uploads and verifies public static image URLs before submitting Markdown, never puts login tokens in image URLs, and stops on missing images or authentication expiry. Pictures are not OCR results. Legacy XLS pictures must first be saved as XLSX; image-bearing Excel sources need a vector document library even when their data sheets also route to tables.',
   'When g1brain_inspect_materials is available, inspect selected sources before importing. The upload tool routes regular Excel worksheets to the domain-bound table collection and explanatory sheets to the selected vector document library. Mixed workbooks are split by worksheet without changing the original. Only document uploads need MD/CHUNK tasks; table uploads return job IDs and require g1brain_get_table_imports to report completed. partial, failed, needs_input, and missing jobs are not success. Do not repeat an uncertain write. For table answers use g1brain_list_data_tables, g1brain_describe_data_table, and read-only SQL through g1brain_query_data_tables, not vector search arithmetic. Do not discard columns or invent missing header meanings. Same collection names alone do not authorize reusing another ontology domain’s table collection.',
   'In a prepared Session, inspect the sources and cite evidence. Execute requested creation, updates, uploads, and document processing within the bound resources without asking for extra confirmation. A request only for information or a plan is not a request to write data. Ask clarification questions only when the intended scope or business requirement is ambiguous.',
   'Deletion and replacement imports that may remove existing content require approval for each call. Set confirm=true for those calls and let Harness request approval; do not ask for a separate chat confirmation. Missing or rejected approval must prevent the deletion.',
@@ -78,6 +79,8 @@ export interface Config {
   readonly tableTimeoutMs: number
   /** Maximum generated XLSX bytes accepted by the table service. */
   readonly tableMaxUploadBytes: number
+  /** Picture-management category ID, using the existing application's picture root by default. */
+  readonly resourceCategoryId: string
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -127,6 +130,7 @@ export default class G1brainIntegration extends TypertRemoteService {
     tableBaseUrl: z.string().default(''),
     tableTimeoutMs: z.natural().min(1).default(120000),
     tableMaxUploadBytes: z.natural().min(1).default(25 * 1024 * 1024),
+    resourceCategoryId: z.string().default('11'),
   })
 
   private readonly endpoint: URL | undefined
@@ -138,6 +142,7 @@ export default class G1brainIntegration extends TypertRemoteService {
   private readonly writesEnabled: boolean
   private readonly client: G1BrainClient | undefined
   private readonly tables: TableClient | undefined
+  private authenticationExpired = false
 
   constructor(ctx: Context, private readonly config: Config) {
     super(ctx, 'g1brain')
@@ -175,11 +180,16 @@ export default class G1brainIntegration extends TypertRemoteService {
       timeoutMs: config.timeoutMs,
       localUserId: env.G1BRAIN_LOCAL_USER_ID?.trim() ?? '',
       localClientId: env.G1BRAIN_LOCAL_CLIENT_ID?.trim() ?? '',
+      resourceCategoryId: config.resourceCategoryId,
+      onAuthExpired: () =>{  this.expireAuthentication() },
     })
     if (this.client !== undefined && this.mode === 'oauth') {
       const accessToken = env.G1BRAIN_ACCESS_TOKEN?.trim()
       if (accessToken) this.client.setTokens({
         accessToken, tenantId: config.tenantId, issuedAt: Date.now(),
+        ...(env.G1BRAIN_USER_ID ? { userId: env.G1BRAIN_USER_ID } : {}),
+        ...(env.G1BRAIN_ACCESS_TOKEN_EXPIRES_AT && Number.isFinite(Number(env.G1BRAIN_ACCESS_TOKEN_EXPIRES_AT))
+          ? { expiresAt: Number(env.G1BRAIN_ACCESS_TOKEN_EXPIRES_AT) } : {}),
         ...(env.G1BRAIN_REFRESH_TOKEN ? { refreshToken: env.G1BRAIN_REFRESH_TOKEN } : {}),
       })
     }
@@ -413,6 +423,7 @@ export default class G1brainIntegration extends TypertRemoteService {
   }
 
   private async read(path: string, signal?: AbortSignal): Promise<unknown> {
+    if (this.authenticationExpired) throw new Error('G1brain 登录已过期，请重新登录')
     if (this.endpoint === undefined || this.authentication === undefined) throw new Error('G1brain API authentication is not configured')
     const response = await fetch(new URL(path.slice(1), this.endpoint), {
       headers: { ...this.authentication, 'Tenant-Id': this.config.tenantId, Accept: 'application/json' },
@@ -421,11 +432,23 @@ export default class G1brainIntegration extends TypertRemoteService {
         ? AbortSignal.timeout(this.config.timeoutMs)
         : AbortSignal.any([signal, AbortSignal.timeout(this.config.timeoutMs)]),
     })
+    if (response.status === 401 && this.mode === 'oauth') this.expireAuthentication()
     if (!response.ok) throw new Error(`G1brain catalog request failed (${response.status})`)
     const body: unknown = await response.json()
+    if (isRecord(body) && (body.code === 401 || body.code === '401') && this.mode === 'oauth') {
+      this.expireAuthentication()
+      throw new Error('G1brain 登录已过期，请重新登录')
+    }
     if (body !== null && typeof body === 'object' && 'code' in body && typeof body.code === 'number' && body.code >= 400) {
       throw new Error(`G1brain catalog business request failed (${body.code})`)
     }
     return body
+  }
+
+  private expireAuthentication(): void {
+    if (this.authenticationExpired) return
+    this.authenticationExpired = true
+    this.client?.invalidateAuthentication()
+    this.ctx.emit('g1brain/auth-expired')
   }
 }

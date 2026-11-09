@@ -85,6 +85,8 @@ jobs:
         run: pnpm run build:official
       - name: Verify Excel data routing
         run: pnpm exec vitest run packages/g1brain/integration/tests/excel-routing.spec.ts packages/g1brain/integration/tests/table-routing.spec.ts
+      - name: Verify document image retention and authentication expiry IPC
+        run: pnpm exec vitest run packages/g1brain/integration/tests/document-images.spec.ts apps/desktop/tests/host-process.spec.ts
       - name: Verify G1brain connection settings and sign-out
         run: >-
           pnpm exec vitest run

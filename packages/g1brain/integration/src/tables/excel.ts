@@ -2,6 +2,8 @@
 import { Buffer } from 'node:buffer'
 import * as XLSX from 'xlsx'
 import { readWorkbook, workbookMarkdown } from '../legacy/bridge/material.ts'
+import { workbookImages, worksheetImageMarkdown } from '../legacy/bridge/workbook-images.ts'
+import type { MaterialImage } from '../legacy/bridge/images.ts'
 
 /** One worksheet's automatic routing decision. */
 interface SheetSummary {
@@ -22,6 +24,7 @@ export interface ExcelPlan {
   readonly sheets: readonly SheetDecision[]
   readonly tableBytes?: Buffer
   readonly documentText?: string
+  readonly images: readonly MaterialImage[]
 }
 
 function value(cell: XLSX.CellObject | undefined): string {
@@ -93,11 +96,14 @@ function classify(name: string, sheet: XLSX.WorkSheet): SheetDecision {
  */
 export function planExcel(bytes: Buffer, extension: string, maxBytes: number): ExcelPlan {
   const workbook = readWorkbook(bytes, extension, maxBytes)
+  const pictures = extension === '.xlsx' ? workbookImages(bytes, maxBytes) : new Map<string, readonly MaterialImage[]>()
   if (!workbook.SheetNames.length || workbook.SheetNames.length > 50) throw new Error('Excel 须包含 1～50 个工作表')
   const sheets = workbook.SheetNames.map((name) => {
     const sheet = workbook.Sheets[name]
     if (!sheet) throw new Error(`Excel 缺少工作表：${name}`)
-    return classify(name, sheet)
+    const decision = classify(name, sheet)
+    return decision.route === 'empty' && pictures.has(name)
+      ? { ...decision, route: 'document' as const, reason: '工作表包含图片，按文档保留' } : decision
   })
   const tables = XLSX.utils.book_new()
   const notes = XLSX.utils.book_new()
@@ -126,6 +132,11 @@ export function planExcel(bytes: Buffer, extension: string, maxBytes: number): E
   }
   const encoded: unknown = tables.SheetNames.length ? XLSX.write(tables, { type: 'buffer', bookType: 'xlsx' }) : undefined
   if (encoded !== undefined && !Buffer.isBuffer(encoded)) throw new Error('Excel 导出未返回二进制内容')
-  return { sheets, ...(encoded === undefined ? {} : { tableBytes: encoded }),
-    ...(notes.SheetNames.length ? { documentText: workbookMarkdown(notes, maxBytes) } : {}) }
+  const pictureNotes = sheets.filter(sheet => sheet.route === 'table' && pictures.has(sheet.name))
+    .map(sheet => `## 工作表：${sheet.name.replace(/[\r\n]/gu, ' ')}\n${worksheetImageMarkdown(pictures.get(sheet.name) ?? [])}`).join('\n')
+  const documentText = (notes.SheetNames.length ? workbookMarkdown(notes, maxBytes, pictures) : '') + pictureNotes
+  const images = new Map([...pictures.values()].flat().map(image => [image.key, image]))
+  if (Buffer.byteLength(documentText, 'utf8') + [...images.values()].reduce((size, image) => size + image.bytes.length, 0) > maxBytes) throw new Error('Excel 正文及图片超过大小上限')
+  return { sheets, images: [...images.values()], ...(encoded === undefined ? {} : { tableBytes: encoded }),
+    ...(documentText ? { documentText } : {}) }
 }

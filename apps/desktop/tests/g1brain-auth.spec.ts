@@ -1,5 +1,7 @@
-import { describe, expect, it, vi } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { DEFAULT_G1BRAIN_DEV_BASE_URL, DEFAULT_G1BRAIN_TABLE_DEV_BASE_URL, G1brainAuth, g1brainDevelopmentHostEnvironment } from '../src/g1brain-auth.ts'
+
+afterEach(() => { vi.useRealTimers() })
 
 describe('G1brain desktop login', () => {
   it('clears local sign-in without deleting connection or model settings', async () => {
@@ -78,7 +80,7 @@ describe('G1brain desktop login', () => {
   })
 
   it('uses the G1brain OAuth exchange only when that mode is explicitly configured', async () => {
-    const send = vi.fn<typeof fetch>(async () => new Response(JSON.stringify({ data: { access_token: 'server-token', expires_in: 3600 } }), { status: 200 }))
+    const send = vi.fn<typeof fetch>(async () => new Response(JSON.stringify({ data: { access_token: 'server-token', user_id: 'user-1', expires_in: 3600 } }), { status: 200 }))
     const auth = new G1brainAuth(() => ({ G1BRAIN_AUTH_MODE: 'oauth', G1BRAIN_CLIENT_SECRET: 'fixture-secret' }), send)
     expect(await auth.login('alice', 'fixture-password')).toEqual({ ok: true, username: 'alice' })
     expect(auth.signedIn).toBe(true)
@@ -93,6 +95,9 @@ describe('G1brain desktop login', () => {
     expect(form.get('password')).not.toBe('fixture-password')
     expect(form.get('password')).toMatch(/^[0-9a-f]+$/u)
     expect(init?.headers).toMatchObject({ 'User-Type': 'app', 'Tenant-Id': '000000' })
+    expect(auth.hostEnvironment()).toMatchObject({ G1BRAIN_ACCESS_TOKEN: 'server-token', G1BRAIN_USER_ID: 'user-1', G1BRAIN_REFRESH_TOKEN: undefined })
+    auth.signOut()
+    expect(auth.hostEnvironment().G1BRAIN_ACCESS_TOKEN).toBeUndefined()
   })
 
   it('rejects an unconfigured or refused OAuth exchange without opening a session', async () => {
@@ -102,5 +107,62 @@ describe('G1brain desktop login', () => {
       vi.fn<typeof fetch>(async () => new Response('{}', { status: 401 })))
     expect(await refused.login('alice', 'password')).toEqual({ ok: false, reason: 'invalid-credentials' })
     expect(refused.signedIn).toBe(false)
+  })
+
+  it('reads authenticated user information when the token exchange omits user_id', async () => {
+    const send = vi.fn<typeof fetch>().mockResolvedValueOnce(Response.json({ access_token: 'fixture-token' }))
+      .mockResolvedValueOnce(Response.json({ code: 200, data: { id: 'user-info-id' } }))
+    const auth = new G1brainAuth(() => ({ G1BRAIN_AUTH_MODE: 'oauth', G1BRAIN_CLIENT_SECRET: 'fixture-secret' }), send)
+    expect(await auth.login('alice', 'fixture-password')).toEqual({ ok: true, username: 'alice' })
+    expect(send.mock.calls[1]?.[1]?.headers).toMatchObject({ 'Blade-Auth': 'bearer fixture-token' })
+    expect(auth.hostEnvironment().G1BRAIN_USER_ID).toBe('user-info-id')
+    auth.signOut()
+  })
+
+  it.each([401, '401'])('rejects business-code %s even when the payload contains stale credentials', async (code) => {
+    const environment = () => ({ G1BRAIN_AUTH_MODE: 'oauth', G1BRAIN_CLIENT_ID: 'configured-client', G1BRAIN_CLIENT_SECRET: 'configured-secret' })
+    const refused = new G1brainAuth(environment, async () => Response.json({ code,
+      data: { access_token: 'stale-token', user_id: 'user-1' } }))
+    expect(await refused.login('alice', 'password')).toEqual({ ok: false, reason: 'invalid-credentials' })
+    expect(refused.signedIn).toBe(false)
+    const send = vi.fn<typeof fetch>().mockResolvedValueOnce(Response.json({ access_token: 'fixture-token' }))
+      .mockResolvedValueOnce(Response.json({ code, data: { id: 'stale-user' } }))
+    const userInfo = new G1brainAuth(environment, send)
+    expect(await userInfo.login('alice', 'password')).toEqual({ ok: false, reason: 'invalid-credentials' })
+    expect(userInfo.signedIn).toBe(false)
+  })
+
+  it('expires short-lived tokens once and does not reuse inherited credentials after sign-out', async () => {
+    vi.useFakeTimers()
+    const expired = vi.fn()
+    const auth = new G1brainAuth(() => ({ G1BRAIN_AUTH_MODE: 'oauth', G1BRAIN_CLIENT_SECRET: 'fixture-secret', G1BRAIN_ACCESS_TOKEN: 'old-env-token' }),
+      async () => Response.json({ access_token: 'fixture-token', user_id: 'user-1', expires_in: 32 }), expired)
+    const initial = auth.sessionGeneration
+    expect(await auth.login('alice', 'fixture-password')).toEqual({ ok: true, username: 'alice' })
+    expect(auth.sessionGeneration).toBeGreaterThan(initial)
+    expect(auth.hostEnvironment().G1BRAIN_ACCESS_TOKEN).toBe('fixture-token')
+    await vi.advanceTimersByTimeAsync(2000)
+    expect(auth.signedIn).toBe(false)
+    expect(expired).toHaveBeenCalledTimes(1)
+    expect(auth.expire()).toBe(false)
+    expect(auth.hostEnvironment().G1BRAIN_ACCESS_TOKEN).toBeUndefined()
+    expect(auth.hostEnvironment().G1BRAIN_USER_ID).toBeUndefined()
+  })
+
+  it('does not notify expiry after manual sign-out or restore a late user-info response', async () => {
+    vi.useFakeTimers()
+    const info = Promise.withResolvers<Response>()
+    const expired = vi.fn()
+    const send = vi.fn<typeof fetch>().mockResolvedValueOnce(Response.json({ access_token: 'fixture-token', expires_in: 32 }))
+      .mockImplementationOnce(async () => info.promise)
+    const auth = new G1brainAuth(() => ({ G1BRAIN_AUTH_MODE: 'oauth', G1BRAIN_CLIENT_SECRET: 'fixture-secret' }), send, expired)
+    const login = auth.login('alice', 'fixture-password')
+    await vi.waitFor(() => { expect(send).toHaveBeenCalledTimes(2) })
+    auth.signOut()
+    info.resolve(Response.json({ data: { id: 'user-1' } }))
+    expect(await login).toEqual({ ok: false, reason: 'unavailable' })
+    await vi.advanceTimersByTimeAsync(4000)
+    expect(expired).not.toHaveBeenCalled()
+    expect(auth.signedIn).toBe(false)
   })
 })

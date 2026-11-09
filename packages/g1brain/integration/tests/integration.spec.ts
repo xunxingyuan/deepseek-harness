@@ -126,6 +126,22 @@ describe('G1brain desktop integration', () => {
     await expect(service.listOntologyCollections()).rejects.toThrow('invalid catalog')
   })
 
+  it.each([401, '401'])('notifies Desktop once when catalog authentication expires with code %s', async (code) => {
+    clearAuthentication()
+    process.env.G1BRAIN_AUTH_MODE = 'oauth'
+    process.env.G1BRAIN_CLIENT_SECRET = 'fixture-secret'
+    process.env.G1BRAIN_ACCESS_TOKEN = 'fixture-token'
+    const fetcher = vi.fn(async () => Response.json({ code, msg: 'expired' }))
+    vi.stubGlobal('fetch', fetcher)
+    const { ctx, service } = await integration('http://127.0.0.1:18203/')
+    const expired = vi.fn()
+    ctx.on('g1brain/auth-expired', expired)
+    await expect(service.listOntologyCollections()).rejects.toThrow('重新登录')
+    await expect(service.listDocumentLibraries()).rejects.toThrow('重新登录')
+    expect(expired).toHaveBeenCalledOnce()
+    expect(fetcher).toHaveBeenCalledOnce()
+  })
+
   it('uses the G1brain OAuth API headers when an explicit token and client secret are supplied', async () => {
     clearAuthentication()
     process.env.G1BRAIN_AUTH_MODE = 'oauth'

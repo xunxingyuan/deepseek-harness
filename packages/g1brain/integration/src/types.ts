@@ -1,5 +1,14 @@
 import type { SessionId } from '@deepseek-ai/dsh-session/types'
 
+declare module '@deepseek-ai/cordis' {
+  interface Events {
+    /** The current G1brain credential expired or was rejected; Desktop must return to sign-in.
+     * @mode emit
+     */
+    'g1brain/auth-expired'(): void
+  }
+}
+
 /** Collection entry retaining its API name and optional user-facing label. */
 export interface G1brainCatalogItem {
   /** Stable collection, domain, or library name used in API calls and Session bindings. */

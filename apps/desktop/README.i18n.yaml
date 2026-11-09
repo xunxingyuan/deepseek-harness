@@ -3,11 +3,11 @@
 # After editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write apps/desktop/README.md
 /g1brain-x-deepseek-desktop:
-  en: 2e8924cc5bcaed9a
-  zh: 694c30810c55ef79
+  en: ab29bc8bf1e1c978
+  zh: 82af5bb47fb9517b
 /g1brain-x-deepseek-desktop/g1brain-branch-login:
-  en: 10b1533b50322e3a
-  zh: 3e9ace97d9aceb49
+  en: ae45727193fed54c
+  zh: 387b37729f7a6b6f
 /g1brain-x-deepseek-desktop/terminal-command:
   en: bef92953c237363f
   zh: d21d6effd21b8c00
@@ -75,8 +75,8 @@
   en: 0b225f914142ef0b
   zh: 9ffd07768d37824e
 /g1brain-x-deepseek-desktop/known-limitations:
-  en: 84dd9742218ab3f4
-  zh: b9bc20cebeb21ae9
+  en: 5aeef7b5f21a9e9c
+  zh: 6ab25f0cca1d2a5f
 /g1brain-x-deepseek-desktop/dev-note:
   en: 8e26b460ba31f21b
   zh: fbcd0307b3867125

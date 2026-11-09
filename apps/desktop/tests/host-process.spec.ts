@@ -12,6 +12,11 @@ import { createServer } from 'node:http'
 import { writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 const server = createServer((request, response) => {
+  if (request.url === '/g1brain-expired') {
+    process.send({ type: 'g1brain-auth-expired' })
+    response.end('reported')
+    return
+  }
   if (request.url === '/fatal') {
     process.send({ type: 'fatal', message: 'plugin unavailable' })
     response.end('reported')
@@ -73,6 +78,17 @@ afterEach(async () => {
 })
 
 describe('desktop host process', () => {
+  it('reports G1brain authentication expiry over private child IPC', async () => {
+    const project = projectWithHost()
+    const expired = vi.fn()
+    const host = new DesktopHostProcess(process.execPath, project, project, undefined, process.env,
+      undefined, undefined, undefined, undefined, expired)
+    hosts.push(host)
+    const ready = await host.start()
+    await fetch(new URL('/g1brain-expired', ready.url))
+    await vi.waitFor(() => { expect(expired).toHaveBeenCalledOnce() })
+    await host.stop(true)
+  })
   it('correlates task inspections and admission changes over private IPC', async () => {
     const host = hostProcess(projectWithHost())
     await expect(host.updateTasks('inspect')).rejects.toThrow('Host is unavailable')

@@ -485,6 +485,25 @@ Local grant removal has completed.
 ```
 
 Source: [`packages/credentials/deepseek-account/src/index.ts`](../../packages/credentials/deepseek-account/src/index.ts)
+
+<a id="g1brain-events"></a>
+
+### `g1brain/*` events
+
+<a id="g1brainauth-expired--emit"></a>
+
+#### `g1brain/auth-expired` — emit
+
+The current G1brain credential expired or was rejected; Desktop must return to sign-in.
+
+```ts cordis-catalog
+/** The current G1brain credential expired or was rejected; Desktop must return to sign-in.
+ * @mode emit
+ */
+'g1brain/auth-expired'(): void
+```
+
+Source: [`packages/g1brain/integration/src/types.ts`](../../packages/g1brain/integration/src/types.ts)
 <!-- END GENERATED cordis-surface -->
 
 The account Service Definition exposes getState, getProfile, getBalance, getUnnotifiedBonuses, ackBonusNotified, startSignIn, cancelSignIn, signOut, watch, and Host-only resolveToken and getPlatformSession. The platform provider implements it with an AuthorizationFlow and a private GrantRecord. AccountView distinguishes stored presence from server validation; attempt IDs bind cancellation to one local flow. See [the account package](../../packages/credentials/deepseek-account/README.md).

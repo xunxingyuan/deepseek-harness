@@ -384,6 +384,8 @@ vi.mock('../src/g1brain-auth.ts', async importOriginal => ({
   ...await importOriginal<typeof import('../src/g1brain-auth.ts')>(), G1brainAuth: class {
     get signedIn() { return true }
     get mode() { return 'local-dev' }
+    hostEnvironment() { return {} }
+    expire() { return false }
     async login(username: string) { return { ok: true, username } }
   } }))
 

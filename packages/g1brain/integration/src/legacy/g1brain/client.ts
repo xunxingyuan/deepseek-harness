@@ -13,6 +13,8 @@ import type {
 import { G1BrainError } from '../errors.ts'
 import { encryptG1Password } from './crypto.ts'
 import { requireNewSid, requireRelationLabel, requireResourceName } from '../../names.ts'
+import { uploadedMarkdown, type MaterialDocument } from '../bridge/images.ts'
+import { uploadResourceImage } from './resource-images.ts'
 
 type FetchLike = typeof fetch
 
@@ -86,6 +88,8 @@ class G1BrainClientImpl {
   private readonly fetchImpl: FetchLike
   private tokens: AuthTokens | undefined
   private refreshInFlight: Promise<AuthTokens> | undefined
+  private readonly imageIntents = new Set<string>()
+  private authenticationExpired = false
 
   constructor(config: G1BrainConfig, fetchImpl: FetchLike = fetch) {
     this.config = config
@@ -102,11 +106,61 @@ class G1BrainClientImpl {
 
   setTokens(tokens: AuthTokens): void {
     this.tokens = { ...tokens, issuedAt: tokens.issuedAt || Date.now() }
+    this.authenticationExpired = false
   }
 
   clearTokens(): void {
     this.tokens = undefined
     this.refreshInFlight = undefined
+  }
+
+  /** Stop authenticated requests after another consumer observes expiry, without emitting a second notification. */
+  invalidateAuthentication(): void {
+    this.clearTokens()
+    this.authenticationExpired = true
+  }
+
+  private expireAuthentication(): never {
+    this.clearTokens()
+    if (!this.authenticationExpired) {
+      this.authenticationExpired = true
+      this.config.onAuthExpired?.()
+    }
+    throw new G1BrainError('G1brain 登录已过期，请重新登录', { status: 401 })
+  }
+
+  /** Require a genuine signed-in identity before uploading any static images; development labels are not tokens. */
+  requireImageAuthentication(): void {
+    if (this.tokens?.expiresAt !== undefined && Date.now() >= this.tokens.expiresAt) this.expireAuthentication()
+    if (this.config.authMode !== 'oauth' || !this.tokens?.accessToken || this.tokens.accessToken === 'local-dev') {
+      throw new G1BrainError('上传图片需要 G1brain 真实登录 token；开发模式不会生成该 token，请使用真实登录')
+    }
+    if (!this.tokens.userId?.trim()) throw new G1BrainError('当前登录缺少资源上传用户 ID，请重新登录并读取 G1brain 用户信息')
+  }
+
+  /** Upload embedded/local images first and publish only verified public URLs in Markdown.
+   * @param collectionName - bound document library API name.
+   * @param fileName - preflighted Markdown upload name.
+   * @param document - extracted text and images, never original Office bytes.
+   * @param signal - caller cancellation.
+   * @returns the document receipt and image count; image failures never submit Markdown.
+   */
+  async uploadMdMaterial(collectionName: string, fileName: string, document: MaterialDocument, signal?: AbortSignal): Promise<unknown> {
+    if (document.images.length === 0) return this.uploadMdFile(collectionName, fileName, document.markdown, signal)
+    this.requireImageAuthentication()
+    const userId = this.tokens?.userId
+    if (!userId) throw new G1BrainError('G1brain 登录用户 ID 不可用')
+    const categoryId = this.config.resourceCategoryId?.trim() || '11'
+    const urls = new Map<string, string>()
+    for (const image of document.images) {
+      signal?.throwIfAborted()
+      const deadline = AbortSignal.timeout(this.config.timeoutMs)
+      const operation = signal ? AbortSignal.any([deadline, signal]) : deadline
+      urls.set(image.key, await uploadResourceImage(image, { baseUrl: this.config.baseUrl, categoryId, userId,
+        request: (path, init) => this.request(path, init), fetchPublic: this.fetchImpl, signal: operation, intents: this.imageIntents }))
+    }
+    const result = await this.uploadMdFile(collectionName, fileName, uploadedMarkdown(document, urls), signal)
+    return { document: result, imageCount: urls.size }
   }
 
   async login(input: LoginInput): Promise<AuthTokens> {
@@ -174,6 +228,8 @@ class G1BrainClientImpl {
       ...(typeof token.refresh_token === 'string' ? { refreshToken: token.refresh_token } : {}),
       tenantId: typeof token.tenant_id === 'string' ? token.tenant_id : tenantId,
       ...(typeof token.expires_in === 'number' ? { expiresIn: token.expires_in } : {}),
+      ...(typeof token.expires_in === 'number' && token.expires_in > 0 ? { expiresAt: Date.now() + token.expires_in * 1000 } : {}),
+      ...(typeof token.user_id === 'string' ? { userId: token.user_id } : {}),
       issuedAt: Date.now(),
       ...(isRecord(token.user) ? { user: token.user } : {}),
     }
@@ -772,6 +828,8 @@ class G1BrainClientImpl {
   }
 
   private async request<T>(path: string, init: RequestInit = {}, retry = true): Promise<T> {
+    if (this.config.authMode === 'oauth' && (this.authenticationExpired
+      || (this.tokens?.expiresAt !== undefined && Date.now() >= this.tokens.expiresAt))) this.expireAuthentication()
     const headers = new Headers(init.headers)
     if (this.config.authMode === 'local-dev') {
       headers.set('X-User-Id', this.config.localUserId)
@@ -789,6 +847,8 @@ class G1BrainClientImpl {
     try {
       const response = await this.fetchImpl(this.url(path), { ...init, headers, signal, redirect: 'error' })
       const body = await this.readBody(response)
+      if ((response.status === 401 || (isRecord(body) && (body.code === 401 || body.code === '401')))
+        && this.config.authMode === 'oauth' && this.config.onAuthExpired !== undefined) this.expireAuthentication()
       if (response.status === 401 && retry && !isTokenPath(path) && this.tokens?.refreshToken) {
         await this.refresh()
         return await this.request<T>(path, init, false)
