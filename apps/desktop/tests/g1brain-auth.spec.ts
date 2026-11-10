@@ -1,7 +1,120 @@
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, describe, expect, it, onTestFinished, vi } from 'vitest'
 import { DEFAULT_G1BRAIN_DEV_BASE_URL, DEFAULT_G1BRAIN_TABLE_DEV_BASE_URL, G1brainAuth, g1brainDevelopmentHostEnvironment } from '../src/g1brain-auth.ts'
 
 afterEach(() => { vi.useRealTimers() })
+
+function refreshingLogin(send: typeof fetch, onExpired = vi.fn(), onRefreshed = vi.fn()) {
+  const auth = new G1brainAuth(() => ({ G1BRAIN_AUTH_MODE: 'oauth', G1BRAIN_CLIENT_ID: 'client', G1BRAIN_CLIENT_SECRET: 'fixture-secret' }),
+    send, onExpired, onRefreshed)
+  onTestFinished(() => { auth.signOut() })
+  return { auth, onExpired, onRefreshed }
+}
+
+const initialToken = () => Response.json({ access_token: 'access-1', refresh_token: 'refresh-1', user_id: 'user-1', expires_in: 100 })
+
+describe('G1brain Desktop token renewal', () => {
+  it('refreshes before expiry, rotates refresh credentials and exposes only access credentials to the Host', async () => {
+    vi.useFakeTimers()
+    const send = vi.fn<typeof fetch>().mockResolvedValueOnce(initialToken())
+      .mockResolvedValueOnce(Response.json({ access_token: 'access-2', refresh_token: 'refresh-2', expires_in: 100 }))
+      .mockResolvedValueOnce(Response.json({ access_token: 'access-3', expires_in: 100 }))
+    const { auth, onExpired, onRefreshed } = refreshingLogin(send)
+    expect((await auth.login('alice', 'password')).ok).toBe(true)
+    await vi.advanceTimersByTimeAsync(79999)
+    expect(send).toHaveBeenCalledTimes(1)
+    await vi.advanceTimersByTimeAsync(1)
+    expect(auth.credential()).toMatchObject({ accessToken: 'access-2', userId: 'user-1', revision: 2 })
+    const form = new URLSearchParams(send.mock.calls[1]?.[1]?.body as string)
+    expect(form.get('grant_type')).toBe('refresh_token')
+    expect(form.get('refresh_token')).toBe('refresh-1')
+    expect(form.has('password')).toBe(false)
+    expect(auth.hostEnvironment().G1BRAIN_REFRESH_TOKEN).toBeUndefined()
+    expect(JSON.stringify(auth.credential())).not.toContain('refresh-')
+    await vi.advanceTimersByTimeAsync(80000)
+    expect(new URLSearchParams(send.mock.calls[2]?.[1]?.body as string).get('refresh_token')).toBe('refresh-2')
+    expect(auth.credential()?.accessToken).toBe('access-3')
+    expect(onRefreshed).toHaveBeenCalledTimes(2)
+    expect(onExpired).not.toHaveBeenCalled()
+  })
+
+  it('shares one pending refresh and ignores a delayed rejection of the superseded access token', async () => {
+    const pending = Promise.withResolvers<Response>()
+    const send = vi.fn<typeof fetch>().mockResolvedValueOnce(initialToken()).mockReturnValueOnce(pending.promise)
+    const { auth } = refreshingLogin(send)
+    await auth.login('alice', 'password')
+    const requests = [auth.refresh('access-1'), auth.refresh('access-1'), auth.refresh()]
+    onTestFinished(async () => { pending.resolve(Response.json({ access_token: 'access-2', expires_in: 100 })); await Promise.all(requests) })
+    expect(send).toHaveBeenCalledTimes(2)
+    pending.resolve(Response.json({ access_token: 'access-2', expires_in: 100 }))
+    expect((await Promise.all(requests)).every(result => result.kind === 'updated')).toBe(true)
+    expect(await auth.refresh('access-1')).toMatchObject({ kind: 'updated', credential: { accessToken: 'access-2' } })
+    expect(send).toHaveBeenCalledTimes(2)
+  })
+
+  it.each([400, 401, 403])('returns to sign-in once after a definite refresh rejection (%s)', async (status) => {
+    const send = vi.fn<typeof fetch>().mockResolvedValueOnce(initialToken()).mockResolvedValueOnce(new Response('rejected', { status }))
+    const { auth, onExpired } = refreshingLogin(send)
+    await auth.login('alice', 'password')
+    expect(await auth.refresh()).toEqual({ kind: 'expired' })
+    expect(auth.signedIn).toBe(false)
+    expect(await auth.refresh()).toEqual({ kind: 'expired' })
+    expect(onExpired).toHaveBeenCalledOnce()
+    expect(send).toHaveBeenCalledTimes(2)
+  })
+
+  it('retains the session on transient network failure and retries without replaying the password', async () => {
+    vi.useFakeTimers()
+    const send = vi.fn<typeof fetch>().mockResolvedValueOnce(initialToken()).mockRejectedValueOnce(new Error('offline'))
+      .mockResolvedValueOnce(Response.json({ access_token: 'access-2', expires_in: 100 }))
+    const { auth, onExpired } = refreshingLogin(send)
+    await auth.login('alice', 'password')
+    expect(await auth.refresh()).toEqual({ kind: 'unavailable' })
+    expect(auth.signedIn).toBe(true)
+    await vi.advanceTimersByTimeAsync(5000)
+    expect(auth.credential()?.accessToken).toBe('access-2')
+    expect(onExpired).not.toHaveBeenCalled()
+  })
+
+  it('does not force a new login while offline beyond the access-token deadline', async () => {
+    vi.useFakeTimers()
+    const send = vi.fn<typeof fetch>().mockResolvedValueOnce(Response.json({ access_token: 'access-1', refresh_token: 'refresh-1', user_id: 'user-1', expires_in: 1 }))
+      .mockRejectedValueOnce(new Error('offline')).mockResolvedValueOnce(Response.json({ access_token: 'access-2', expires_in: 100 }))
+    const { auth, onExpired } = refreshingLogin(send)
+    await auth.login('alice', 'password')
+    await vi.advanceTimersByTimeAsync(1100)
+    expect(auth.signedIn).toBe(true)
+    expect(onExpired).not.toHaveBeenCalled()
+    expect((await auth.refresh()).kind).toBe('updated')
+    expect(auth.credential()?.accessToken).toBe('access-2')
+  })
+
+  it('aborts renewal and discards its late response after sign-out and another user login', async () => {
+    const pending = Promise.withResolvers<Response>()
+    const send = vi.fn<typeof fetch>().mockResolvedValueOnce(initialToken()).mockReturnValueOnce(pending.promise)
+      .mockResolvedValueOnce(Response.json({ access_token: 'bob-access', refresh_token: 'bob-refresh', user_id: 'bob', expires_in: 100 }))
+    const { auth, onExpired, onRefreshed } = refreshingLogin(send)
+    await auth.login('alice', 'password')
+    const refreshing = auth.refresh()
+    onTestFinished(async () => { pending.resolve(Response.json({ access_token: 'late-access', expires_in: 100 })); await refreshing })
+    auth.signOut()
+    expect(send.mock.calls[1]?.[1]?.signal?.aborted).toBe(true)
+    await auth.login('bob', 'password')
+    pending.resolve(Response.json({ access_token: 'late-access', expires_in: 100 }))
+    expect(await refreshing).toEqual({ kind: 'expired' })
+    expect(auth.credential()).toMatchObject({ accessToken: 'bob-access', userId: 'bob' })
+    expect(onExpired).not.toHaveBeenCalled()
+    expect(onRefreshed).not.toHaveBeenCalled()
+  })
+
+  it('rejects an unexpected user change in the refresh response', async () => {
+    const send = vi.fn<typeof fetch>().mockResolvedValueOnce(initialToken())
+      .mockResolvedValueOnce(Response.json({ access_token: 'other-user-token', user_id: 'other-user', expires_in: 100 }))
+    const { auth, onExpired } = refreshingLogin(send)
+    await auth.login('alice', 'password')
+    expect(await auth.refresh()).toEqual({ kind: 'expired' })
+    expect(onExpired).toHaveBeenCalledOnce()
+  })
+})
 
 describe('G1brain desktop login', () => {
   it('clears local sign-in without deleting connection or model settings', async () => {
@@ -141,7 +254,7 @@ describe('G1brain desktop login', () => {
     expect(await auth.login('alice', 'fixture-password')).toEqual({ ok: true, username: 'alice' })
     expect(auth.sessionGeneration).toBeGreaterThan(initial)
     expect(auth.hostEnvironment().G1BRAIN_ACCESS_TOKEN).toBe('fixture-token')
-    await vi.advanceTimersByTimeAsync(2000)
+    await vi.advanceTimersByTimeAsync(32000)
     expect(auth.signedIn).toBe(false)
     expect(expired).toHaveBeenCalledTimes(1)
     expect(auth.expire()).toBe(false)

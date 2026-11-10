@@ -16,6 +16,8 @@ export interface G1BrainConfig {
   localClientId: string
   resourceCategoryId?: string
   onAuthExpired?: () => void
+  /** Renew through the current Host owner; false means the login is definitively unavailable. */
+  renewAuthentication?: (rejectedAccessToken?: string) => Promise<boolean>
 }
 
 /** OAuth token and associated tenant identity. */

@@ -1,5 +1,19 @@
 import type { SessionId } from '@deepseek-ai/dsh-session/types'
 
+/** Private Host credential update; never a Remote result, model input, or durable event. */
+export interface G1brainAccessCredential {
+  readonly accessToken: string
+  readonly userId: string
+  readonly revision: number
+  readonly expiresAt?: number
+}
+
+/** Desktop-owned renewal outcome; refresh tokens never leave its main process. */
+export type G1brainRefreshResult =
+  | { readonly kind: 'updated'; readonly credential: G1brainAccessCredential }
+  | { readonly kind: 'expired' }
+  | { readonly kind: 'unavailable' }
+
 declare module '@deepseek-ai/cordis' {
   interface Events {
     /** The current G1brain credential expired or was rejected; Desktop must return to sign-in.

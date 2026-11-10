@@ -316,8 +316,9 @@ async function main(): Promise<void> {
   const manager = new DesktopProjectManager(paths, resources)
   // Dock and Finder launches inherit only launchd's environment; every Host shares one login-shell read.
   const loginShellRead = new AbortController()
+  let stopG1brainAuthentication = (): void => {}
   // The probe runs in its own process group, which outlives Desktop unless the read is aborted.
-  app.on('will-quit', () => { loginShellRead.abort() })
+  app.on('will-quit', () => { loginShellRead.abort(); stopG1brainAuthentication() })
   const loginShell = readDesktopLoginShellEnvironment(process.env, resolveDesktopLoginShellConfig(process.env), {
     signal: loginShellRead.signal,
   }).then((result) => {
@@ -325,13 +326,22 @@ async function main(): Promise<void> {
     return result.environment
   })
   let hostEnvironment: NodeJS.ProcessEnv = process.env
+  let g1brainHost: { host: DesktopHostProcess; generation: number } | undefined
   const manifest: unknown = JSON.parse(await readFile(join(app.getAppPath(), 'package.json'), 'utf8'))
   if (typeof manifest !== 'object' || manifest === null) throw new Error('desktop policy: invalid application manifest')
   const g1brainAuth = new G1brainAuth(
     () => hostEnvironment,
     (input, init) => net.fetch(input instanceof URL ? input.toString() : input, init),
     () => { g1brainExpiryRequested = true; void returnToG1brainLogin().catch((error: unknown) => { reportFatal(error, 'main') }) },
+    () => {
+      hostEnvironment = { ...hostEnvironment, ...g1brainAuth.hostEnvironment() }
+      const credential = g1brainAuth.credential()
+      if (credential && g1brainHost?.generation === g1brainAuth.sessionGeneration) {
+        g1brainHost.host.updateG1brainAuthentication(credential)
+      }
+    },
   )
+  stopG1brainAuthentication = () => { g1brainAuth.signOut() }
   const connectionStore = new G1brainConnectionStore(join(app.getPath('userData'), 'g1brain-connections.json'), {
     available: () => safeStorage.isEncryptionAvailable()
       && (process.platform !== 'linux' || safeStorage.getSelectedStorageBackend() !== 'basic_text'),
@@ -460,10 +470,17 @@ async function main(): Promise<void> {
       primaryRuntime,
       resources, (next) => { platformView.setSession(next) }, () => {
         if (g1brainGeneration === g1brainAuth.sessionGeneration) g1brainAuth.expire()
+      }, async (rejectedAccessToken) => {
+        if (g1brainGeneration !== g1brainAuth.sessionGeneration) return { kind: 'expired' }
+        const result = await g1brainAuth.refresh(rejectedAccessToken)
+        return g1brainGeneration === g1brainAuth.sessionGeneration ? result : { kind: 'expired' }
       })
+    g1brainHost = { host, generation: g1brainGeneration }
     return {
       start: async () => {
         const ready = await host.start()
+        const credential = g1brainAuth.credential()
+        if (credential && g1brainGeneration === g1brainAuth.sessionGeneration) host.updateG1brainAuthentication(credential)
         hostCookie = await authenticateWebHost(ready.url)
         hostUrl = ready.url
         if (ready.injections === undefined) throw new Error('Desktop Host did not provide boot injections')

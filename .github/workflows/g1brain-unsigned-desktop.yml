@@ -86,7 +86,7 @@ jobs:
       - name: Verify Excel data routing
         run: pnpm exec vitest run packages/g1brain/integration/tests/excel-routing.spec.ts packages/g1brain/integration/tests/table-routing.spec.ts
       - name: Verify document image retention and authentication expiry IPC
-        run: pnpm exec vitest run packages/g1brain/integration/tests/document-images.spec.ts apps/desktop/tests/host-process.spec.ts
+        run: pnpm exec vitest run packages/g1brain/integration/tests/document-images.spec.ts packages/g1brain/integration/tests/auth-renewal.spec.ts apps/desktop/tests/host-process.spec.ts apps/desktop-host/tests/g1brain-auth.spec.ts
       - name: Verify G1brain connection settings and sign-out
         run: >-
           pnpm exec vitest run
@@ -103,11 +103,11 @@ jobs:
         env:
           DSH_EXAMPLE_MODE: lib
         run: pnpm run test:e2e packages/g1brain/integration/tests/workflow.e2e.ts --retry=0
-      - name: Replay G1brain guidance Session
+      - name: Replay G1brain guidance and renewal Sessions
         if: runner.os != 'Windows'
         env:
           DSH_EXAMPLE_MODE: lib
-        run: pnpm run test:snapshot snapshots/session/headless.snapshot.ts -t 'replays g1brain-session-guidance'
+        run: pnpm run test:snapshot snapshots/session/headless.snapshot.ts -t 'replays g1brain-(session-guidance|auth-renewal)'
 
   mac-arm64:
     needs: [version, regression]

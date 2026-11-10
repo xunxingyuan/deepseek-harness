@@ -6,6 +6,7 @@ import type { BrowserWindowConstructorOptions } from 'electron'
 import type { DesktopLocale } from '../src/locale.ts'
 import type { AccountView } from '@deepseek-ai/dsh-deepseek-account/types'
 import type { G1brainConnectionInput, WelcomeOperations } from '../src/welcome-api.ts'
+import type { G1brainHostCredential, G1brainRefreshResult } from '../src/g1brain-auth.ts'
 import { DESKTOP_IPC } from '../src/ipc.ts'
 
 const state = vi.hoisted(() => ({
@@ -34,6 +35,8 @@ const state = vi.hoisted(() => ({
   savedConnections: undefined as G1brainConnectionInput | undefined,
   hostEnvironments: [] as NodeJS.ProcessEnv[],
   g1brainExpiries: [] as Array<(() => void) | undefined>,
+  g1brainRefreshes: [] as Array<((token?: string) => Promise<G1brainRefreshResult>) | undefined>,
+  g1brainUpdates: [] as G1brainHostCredential[],
   welcomeLocale: undefined as DesktopLocale | undefined,
   preference: 'zh',
   hasApiKey: false,
@@ -127,12 +130,15 @@ vi.mock('../src/host-process.ts', async importOriginal => ({
   ...await importOriginal<typeof import('../src/host-process.ts')>(),
   DesktopHostProcess: class {
     constructor(_node: string, _runtime: string, _project: string, _port: unknown, environment: NodeJS.ProcessEnv,
-      _failure?: unknown, _primary?: unknown, _manager?: unknown, _platform?: unknown, g1brainExpired?: () => void) {
+      _failure?: unknown, _primary?: unknown, _manager?: unknown, _platform?: unknown, g1brainExpired?: () => void,
+      refresh?: (token?: string) => Promise<G1brainRefreshResult>) {
       state.hostEnvironments.push(environment)
       state.g1brainExpiries.push(g1brainExpired)
+      state.g1brainRefreshes.push(refresh)
     }
     start = state.startHost
     stop = state.stopHost
+    updateG1brainAuthentication(credential: G1brainHostCredential) { state.g1brainUpdates.push(credential) }
     fetch() {
       return Promise.resolve(Response.json({
         loggedIn: false, hasApiKey: state.hasApiKey, writable: true, localePreference: state.preference,
@@ -191,7 +197,7 @@ afterEach(() => {
   vi.restoreAllMocks()
 })
 
-it.each(['deadline', 'server-401', 'saved-credentials'])('hands the signed-in token to the Host and returns to G1brain login on %s', async (reason) => {
+it.each(['deadline', 'server-401', 'saved-credentials', 'renewal'])('isolates the G1brain credential lifecycle (%s)', async (reason) => {
   vi.resetModules()
   vi.clearAllMocks()
   vi.useFakeTimers()
@@ -199,6 +205,8 @@ it.each(['deadline', 'server-401', 'saved-credentials'])('hands the signed-in to
   state.savedConnections = undefined
   state.hostEnvironments.length = 0
   state.g1brainExpiries.length = 0
+  state.g1brainRefreshes.length = 0
+  state.g1brainUpdates.length = 0
   state.beforeRead.mockResolvedValue(undefined)
   state.beforeWelcome.mockResolvedValue(undefined)
   vi.stubEnv('DSH_CLIENT_VERSION', '1.2.3')
@@ -218,7 +226,10 @@ it.each(['deadline', 'server-401', 'saved-credentials'])('hands the signed-in to
       clientId: 'configured-client', clientSecret: 'saved-private-secret' }
   }
   const { net } = await import('electron')
-  vi.spyOn(net, 'fetch').mockResolvedValue(Response.json({ access_token: 'private-fixture-token', user_id: 'user-1', expires_in: 32 }))
+  const send = vi.spyOn(net, 'fetch').mockResolvedValue(Response.json({ access_token: 'private-fixture-token', user_id: 'user-1', expires_in: 32 }))
+  if (reason === 'renewal') send.mockReset()
+    .mockResolvedValueOnce(Response.json({ access_token: 'private-fixture-token', refresh_token: 'private-refresh-token', user_id: 'user-1', expires_in: 100 }))
+    .mockResolvedValueOnce(Response.json({ access_token: 'renewed-access-token', refresh_token: 'rotated-refresh-token', expires_in: 100 }))
   await import('../src/main.ts')
   await vi.waitFor(() => { expect(state.operations).toBeDefined() })
   if (reason === 'saved-credentials') {
@@ -235,8 +246,19 @@ it.each(['deadline', 'server-401', 'saved-credentials'])('hands the signed-in to
   await vi.advanceTimersByTimeAsync(0)
   expect(state.startHost).toHaveBeenCalledTimes(2)
   const shownBefore = state.beforeWelcome.mock.calls.length
+  if (reason === 'renewal') {
+    await vi.advanceTimersByTimeAsync(80001)
+    expect(state.startHost).toHaveBeenCalledTimes(2)
+    expect(state.g1brainUpdates.at(-1)).toMatchObject({ accessToken: 'renewed-access-token', revision: 2 })
+    expect(state.beforeWelcome).toHaveBeenCalledTimes(shownBefore)
+    expect(JSON.stringify(state.hostEnvironments)).not.toContain('private-refresh-token')
+    expect(JSON.stringify(state.g1brainUpdates)).not.toContain('rotated-refresh-token')
+    expect(await state.g1brainRefreshes[1]?.('private-fixture-token')).toMatchObject({ kind: 'updated', credential: { accessToken: 'renewed-access-token' } })
+    expect(send).toHaveBeenCalledTimes(2)
+    return
+  }
   if (reason !== 'deadline') state.g1brainExpiries[1]?.()
-  else await vi.advanceTimersByTimeAsync(2001)
+  else await vi.advanceTimersByTimeAsync(32001)
   await vi.waitFor(() => { expect(state.startHost).toHaveBeenCalledTimes(3) })
   expect(state.beforeWelcome).toHaveBeenCalledTimes(shownBefore + 1)
   expect(state.hostEnvironments[2]?.G1BRAIN_ACCESS_TOKEN).toBeUndefined()

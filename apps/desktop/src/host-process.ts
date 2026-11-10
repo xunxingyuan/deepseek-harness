@@ -4,6 +4,7 @@ import { spawn, type ChildProcess } from 'node:child_process'
 import { join } from 'node:path'
 import type { PlatformSession } from '@deepseek-ai/dsh-deepseek-account'
 import { desktopNodeEnvironment } from './node-environment.ts'
+import type { G1brainHostCredential, G1brainRefreshResult } from './g1brain-auth.ts'
 
 interface ReadyEvent {
   readonly type: 'ready'
@@ -24,6 +25,10 @@ interface PlatformSessionEvent {
 }
 
 type DesktopHostEvent = ReadyEvent | FatalEvent | PlatformSessionEvent | { readonly type: 'shutdown-complete' } | { readonly type: 'g1brain-auth-expired' } | {
+  readonly type: 'g1brain-auth-refresh'
+  readonly requestId: number
+  readonly rejectedAccessToken?: string
+} | {
   readonly type: 'update-tasks'
   readonly requestId: number
   readonly active: boolean
@@ -37,7 +42,7 @@ type DesktopHostEvent = ReadyEvent | FatalEvent | PlatformSessionEvent | { reado
 }
 
 /** Correlated answer to one shell control request. */
-type DesktopHostControlResponse = Extract<DesktopHostEvent, { readonly requestId: number }>
+type DesktopHostControlResponse = Extract<DesktopHostEvent, { readonly type: 'update-tasks' | 'quit-inspection' }>
 
 /** What quitting now would affect, as reported by the Host. */
 export interface DesktopQuitInspection {
@@ -57,6 +62,10 @@ function isDesktopHostEvent(message: unknown): message is DesktopHostEvent {
     case 'shutdown-complete':
     case 'g1brain-auth-expired':
       return true
+    case 'g1brain-auth-refresh':
+      return Number.isSafeInteger(candidate.requestId) && Number(candidate.requestId) > 0
+        && (candidate.rejectedAccessToken === undefined
+          || (typeof candidate.rejectedAccessToken === 'string' && candidate.rejectedAccessToken.length <= 65536))
     case 'ready':
       return typeof candidate.url === 'string'
     case 'platform-session': {
@@ -167,6 +176,7 @@ export class DesktopHostProcess {
    * @param packageManager - Bundled pnpm entry and Node launcher directory, scoped to package operations.
    * @param onPlatformSession - Private credential updates for embedded Platform views.
    * @param onG1brainAuthExpired - Credential-free notification that G1brain requires sign-in again.
+   * @param onG1brainRefresh - Main-process access-only renewal; refresh tokens never reach the Host.
    */
   constructor(
     private readonly node: string,
@@ -180,6 +190,7 @@ export class DesktopHostProcess {
 
     private readonly onPlatformSession?: (session: PlatformSession | null) => void,
     private readonly onG1brainAuthExpired?: () => void,
+    private readonly onG1brainRefresh?: (rejectedAccessToken?: string) => Promise<G1brainRefreshResult>,
   ) {}
 
   /**
@@ -215,6 +226,17 @@ export class DesktopHostProcess {
       if (message.type === 'ready') this.readyResolve({ url: message.url, injections: message.injections })
       else if (message.type === 'platform-session') this.onPlatformSession?.(message.session)
       else if (message.type === 'g1brain-auth-expired') { if (!this.stopping) this.onG1brainAuthExpired?.() }
+      else if (message.type === 'g1brain-auth-refresh') {
+        if (this.stopping) return
+        void (async () => {
+          let result: G1brainRefreshResult
+          try { result = await this.onG1brainRefresh?.(message.rejectedAccessToken) ?? { kind: 'unavailable' } }
+          catch (_refreshUnavailable: unknown) { result = { kind: 'unavailable' } }
+          if (this.child === child && child.connected && !this.stopping) {
+            child.send({ type: 'g1brain-auth-refreshed', requestId: message.requestId, result }, (_closedChannel) => { /* Child exit owns recovery. */ })
+          }
+        })()
+      }
       else if (message.type === 'shutdown-complete') {
         if (this.stopping) this.shutdownCompleted = true
         else this.fail(new Error('dsh desktop host acknowledged an unrequested shutdown'))
@@ -236,6 +258,15 @@ export class DesktopHostProcess {
       })
     })
     return this.readyPromise
+  }
+
+  /** Push a main-process access credential without replacing the child or interrupting Sessions.
+   * @param credential - access-only snapshot; revision ordering is enforced by the Host.
+   */
+  updateG1brainAuthentication(credential: G1brainHostCredential): void {
+    if (this.child?.connected && !this.stopping) {
+      this.child.send({ type: 'g1brain-auth-update', credential }, (_closedChannel) => { /* Child exit owns recovery. */ })
+    }
   }
 
   /**

@@ -1,0 +1,15 @@
+version: 1
+scenario: g1brain-auth-renewal
+profile: headless
+composition: g1brain-auth-renewal
+recording: authored
+workspace:
+  final: true
+environment:
+  G1BRAIN_AUTH_MODE: oauth
+  G1BRAIN_ACCESS_TOKEN: snapshot-access-old
+  G1BRAIN_USER_ID: snapshot-user
+  G1BRAIN_CLIENT_SECRET: snapshot-client-fixture
+header:
+  class: g1brain-auth-renewal
+  pin: true

@@ -20,9 +20,10 @@ import { openWorkspaceScope } from './legacy/bridge/scope.ts'
 import { createG1BrainTools } from './legacy/bridge/tools.ts'
 import { validateInput } from './legacy/bridge/validate.ts'
 import { createG1BrainClient, type G1BrainClient } from './legacy/g1brain/client.ts'
+import { G1BrainError } from './legacy/errors.ts'
 import type { PreparedTask } from './legacy/types.ts'
 import { toHarnessToolSchema } from './tool-schema.ts'
-import type { G1brainBindReceipt, G1brainBindRequest, G1brainCatalogItem, G1brainStatus } from './types.ts'
+import type { G1brainAccessCredential, G1brainRefreshResult, G1brainBindReceipt, G1brainBindRequest, G1brainCatalogItem, G1brainStatus } from './types.ts'
 
 export type { G1brainBindReceipt, G1brainBindRequest, G1brainCatalogItem, G1brainSessionTarget, G1brainStatus } from './types.ts'
 
@@ -134,7 +135,7 @@ export default class G1brainIntegration extends TypertRemoteService {
   })
 
   private readonly endpoint: URL | undefined
-  private readonly authentication: Readonly<Record<string, string>> | undefined
+  private authentication: Readonly<Record<string, string>> | undefined
   private readonly mode: G1brainStatus['mode']
   private readonly bindings = createBindingStore(join(resolveDshHome(), 'g1brain', 'bindings'))
   private readonly installed = new WeakSet<Agent>()
@@ -143,6 +144,9 @@ export default class G1brainIntegration extends TypertRemoteService {
   private readonly client: G1BrainClient | undefined
   private readonly tables: TableClient | undefined
   private authenticationExpired = false
+  private credentialRevision = 0
+  private refreshProvider: { refresh: (rejectedAccessToken?: string) => Promise<G1brainRefreshResult> } | undefined
+  private renewal: Promise<boolean> | undefined
 
   constructor(ctx: Context, private readonly config: Config) {
     super(ctx, 'g1brain')
@@ -182,6 +186,7 @@ export default class G1brainIntegration extends TypertRemoteService {
       localClientId: env.G1BRAIN_LOCAL_CLIENT_ID?.trim() ?? '',
       resourceCategoryId: config.resourceCategoryId,
       onAuthExpired: () =>{  this.expireAuthentication() },
+      renewAuthentication: token => this.renewAuthentication(token),
     })
     if (this.client !== undefined && this.mode === 'oauth') {
       const accessToken = env.G1BRAIN_ACCESS_TOKEN?.trim()
@@ -422,9 +427,65 @@ export default class G1brainIntegration extends TypertRemoteService {
     return itemsOf(await this.read('/mdApi/v1/md/collections', signal))
   }
 
-  private async read(path: string, signal?: AbortSignal): Promise<unknown> {
-    if (this.authenticationExpired) throw new Error('G1brain 登录已过期，请重新登录')
+  /** Attach a private Host credential owner; neither the callback nor returned controller is a Remote API.
+   * @param refresh - main-process renewal capability, without exposing its refresh token.
+   * @returns access-only update and idempotent detach capabilities for this owner lifetime.
+   */
+  connectAuthentication(refresh: (rejectedAccessToken?: string) => Promise<G1brainRefreshResult>): {
+    update: (credential: G1brainAccessCredential) => void
+    dispose: () => void
+  } {
+    if (this.refreshProvider) throw new Error('G1brain authentication owner already connected')
+    const owner = { refresh }
+    this.refreshProvider = owner
+    return {
+      update: (credential) => { if (this.refreshProvider === owner) this.updateAuthentication(credential) },
+      dispose: () => { if (this.refreshProvider === owner) this.refreshProvider = undefined },
+    }
+  }
+
+  private updateAuthentication(credential: G1brainAccessCredential): void {
+    if (this.mode !== 'oauth' || !this.client || !this.authentication || credential.revision <= this.credentialRevision) return
+    const userId = this.client.authState?.userId
+    if (userId && userId !== credential.userId) throw new Error('G1brain credential identity changed')
+    this.credentialRevision = credential.revision
+    this.authenticationExpired = false
+    this.authentication = { ...this.authentication, 'Blade-Auth': `bearer ${credential.accessToken}` }
+    this.client.setTokens({ accessToken: credential.accessToken, userId: credential.userId,
+      tenantId: this.config.tenantId, issuedAt: Date.now(),
+      ...(credential.expiresAt === undefined ? {} : { expiresAt: credential.expiresAt }) })
+  }
+
+  private renewAuthentication(rejectedAccessToken?: string): Promise<boolean> {
+    const current = this.client?.authState
+    if (current && rejectedAccessToken !== undefined && current.accessToken !== rejectedAccessToken
+      && (current.expiresAt === undefined || current.expiresAt > Date.now())) return Promise.resolve(true)
+    const provider = this.refreshProvider
+    if (!provider) return Promise.resolve(false)
+    if (this.renewal) return this.renewal
+    const operation = (async () => {
+      const result = await provider.refresh(rejectedAccessToken)
+      if (this.refreshProvider !== provider) throw new G1BrainError('G1brain 登录续期暂不可用，请稍后重试', { status: 503 })
+      if (result.kind === 'expired') return false
+      if (result.kind === 'unavailable') throw new G1BrainError('G1brain 登录续期暂不可用，请检查网络后重试', { status: 503 })
+      this.updateAuthentication(result.credential)
+      return true
+    })().finally(() => { if (this.renewal === operation) this.renewal = undefined })
+    this.renewal = operation
+    return operation
+  }
+
+  private async read(path: string, signal?: AbortSignal, retry = true): Promise<unknown> {
+    const state = this.client?.authState
+    if (this.mode === 'oauth' && (this.authenticationExpired || (state?.expiresAt !== undefined && state.expiresAt <= Date.now()))) {
+      if (!await this.renewAuthentication(state?.accessToken)) {
+        this.expireAuthentication()
+        throw new Error('G1brain 登录已过期，请重新登录')
+      }
+    }
+    signal?.throwIfAborted()
     if (this.endpoint === undefined || this.authentication === undefined) throw new Error('G1brain API authentication is not configured')
+    const requestToken = this.client?.authState?.accessToken
     const response = await fetch(new URL(path.slice(1), this.endpoint), {
       headers: { ...this.authentication, 'Tenant-Id': this.config.tenantId, Accept: 'application/json' },
       redirect: 'error',
@@ -432,10 +493,17 @@ export default class G1brainIntegration extends TypertRemoteService {
         ? AbortSignal.timeout(this.config.timeoutMs)
         : AbortSignal.any([signal, AbortSignal.timeout(this.config.timeoutMs)]),
     })
-    if (response.status === 401 && this.mode === 'oauth') this.expireAuthentication()
+    if (response.status === 401 && this.mode === 'oauth') {
+      if (!retry) throw new G1BrainError('G1brain 请求未获授权，请检查当前账号权限', { status: 401 })
+      if (await this.renewAuthentication(requestToken)) return this.read(path, signal, false)
+      this.expireAuthentication()
+      throw new Error('G1brain 登录已过期，请重新登录')
+    }
     if (!response.ok) throw new Error(`G1brain catalog request failed (${response.status})`)
     const body: unknown = await response.json()
     if (isRecord(body) && (body.code === 401 || body.code === '401') && this.mode === 'oauth') {
+      if (!retry) throw new G1BrainError('G1brain 请求未获授权，请检查当前账号权限', { status: 401 })
+      if (await this.renewAuthentication(requestToken)) return this.read(path, signal, false)
       this.expireAuthentication()
       throw new Error('G1brain 登录已过期，请重新登录')
     }

@@ -130,8 +130,10 @@ class G1BrainClientImpl {
   }
 
   /** Require a genuine signed-in identity before uploading any static images; development labels are not tokens. */
-  requireImageAuthentication(): void {
-    if (this.tokens?.expiresAt !== undefined && Date.now() >= this.tokens.expiresAt) this.expireAuthentication()
+  async requireImageAuthentication(): Promise<void> {
+    if (this.tokens?.expiresAt !== undefined && Date.now() >= this.tokens.expiresAt) {
+      if (!await this.config.renewAuthentication?.(this.tokens.accessToken)) this.expireAuthentication()
+    }
     if (this.config.authMode !== 'oauth' || !this.tokens?.accessToken || this.tokens.accessToken === 'local-dev') {
       throw new G1BrainError('上传图片需要 G1brain 真实登录 token；开发模式不会生成该 token，请使用真实登录')
     }
@@ -147,7 +149,7 @@ class G1BrainClientImpl {
    */
   async uploadMdMaterial(collectionName: string, fileName: string, document: MaterialDocument, signal?: AbortSignal): Promise<unknown> {
     if (document.images.length === 0) return this.uploadMdFile(collectionName, fileName, document.markdown, signal)
-    this.requireImageAuthentication()
+    await this.requireImageAuthentication()
     const userId = this.tokens?.userId
     if (!userId) throw new G1BrainError('G1brain 登录用户 ID 不可用')
     const categoryId = this.config.resourceCategoryId?.trim() || '11'
@@ -829,7 +831,11 @@ class G1BrainClientImpl {
 
   private async request<T>(path: string, init: RequestInit = {}, retry = true): Promise<T> {
     if (this.config.authMode === 'oauth' && (this.authenticationExpired
-      || (this.tokens?.expiresAt !== undefined && Date.now() >= this.tokens.expiresAt))) this.expireAuthentication()
+      || (this.tokens?.expiresAt !== undefined && Date.now() >= this.tokens.expiresAt))) {
+      if (!await this.config.renewAuthentication?.(this.tokens?.accessToken)) this.expireAuthentication()
+    }
+    init.signal?.throwIfAborted()
+    const requestToken = this.tokens?.accessToken
     const headers = new Headers(init.headers)
     if (this.config.authMode === 'local-dev') {
       headers.set('X-User-Id', this.config.localUserId)
@@ -847,8 +853,14 @@ class G1BrainClientImpl {
     try {
       const response = await this.fetchImpl(this.url(path), { ...init, headers, signal, redirect: 'error' })
       const body = await this.readBody(response)
-      if ((response.status === 401 || (isRecord(body) && (body.code === 401 || body.code === '401')))
-        && this.config.authMode === 'oauth' && this.config.onAuthExpired !== undefined) this.expireAuthentication()
+      const rejected = response.status === 401 || (isRecord(body) && (body.code === 401 || body.code === '401'))
+      if (rejected && this.config.authMode === 'oauth' && this.config.renewAuthentication) {
+        if (!retry) throw new G1BrainError('G1brain 请求未获授权，请检查当前账号权限', { status: 401 })
+        if (!await this.config.renewAuthentication(requestToken)) this.expireAuthentication()
+        if (['GET', 'HEAD'].includes((init.method ?? 'GET').toUpperCase())) return await this.request<T>(path, init, false)
+        throw new G1BrainError('G1brain 凭据已续期；当前请求未自动重发，请核对结果后重试', { status: 401 })
+      }
+      if (rejected && this.config.authMode === 'oauth' && this.config.onAuthExpired !== undefined) this.expireAuthentication()
       if (response.status === 401 && retry && !isTokenPath(path) && this.tokens?.refreshToken) {
         await this.refresh()
         return await this.request<T>(path, init, false)

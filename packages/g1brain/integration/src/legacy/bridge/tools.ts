@@ -244,7 +244,7 @@ export function createG1BrainTools(context: BridgeContext): ToolDefinition[] {
           if (context.uploadMaterials) return text(await context.uploadMaterials(requested, signal))
           const collectionName = requiredString(args, 'collectionName')
           const selected = await scope().prepareUploads(requested)
-          if (selected.some(file => file.images.length > 0)) client.requireImageAuthentication()
+          if (selected.some(file => file.images.length > 0)) await client.requireImageAuthentication()
           const results: Array<{ path: string; uploadName: string; result: unknown }> = []
           for (const file of selected) {
             const result = await client.uploadMdMaterial(collectionName, file.uploadName,

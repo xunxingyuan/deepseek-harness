@@ -23,7 +23,7 @@ kind: "package-reference"
 <a id="use-this-package"></a>
 ## 使用
 
-本地开发桌面版或带有明确标记的未签名测试安装包会提供 `G1BRAIN_BASE_URL`（`http://192.168.100.113:19091`）、`G1BRAIN_LOCAL_USER_ID`（`developer`）、`G1BRAIN_LOCAL_CLIENT_ID`（`g1brain-web`）、`G1BRAIN_ALLOW_LOCAL_DEV=1` 和 `G1BRAIN_ALLOW_DEV_WRITES=1`；环境变量可覆盖这些默认值。宿主会沿用旧客户端的 `X-User-Id`、`X-Client-Id` 请求头；此测试身份与登录时输入的用户名无关。开发和未签名测试配置均启用写入，并不代表登录用户的真实授权。其他部署须自行配置服务地址和认证参数。OAuth 模式需设置 `G1BRAIN_ACCESS_TOKEN` 与 `G1BRAIN_CLIENT_SECRET`（可选设置 `G1BRAIN_CLIENT_ID`）；宿主会发送 Basic 认证与 `Blade-Auth`。`G1BRAIN_TENANT_ID` 默认是 `000000`。没有对应认证参数时，插件仍启用但报告 `configured: false`，目录调用会明确报错。桌面 OAuth 登录通过私有宿主启动环境传递当前 token、经认证的用户 ID 和有效期，不向渲染进程传递凭据。独立运行的 OAuth 宿主上传静态图片时还须配置 G1BRAIN_USER_ID。桌面登录后会替换宿主；凭据到期或认证请求收到 HTTP/业务码 401 时返回登录页。
+本地开发桌面版或带有明确标记的未签名测试安装包会提供 `G1BRAIN_BASE_URL`（`http://192.168.100.113:19091`）、`G1BRAIN_LOCAL_USER_ID`（`developer`）、`G1BRAIN_LOCAL_CLIENT_ID`（`g1brain-web`）、`G1BRAIN_ALLOW_LOCAL_DEV=1` 和 `G1BRAIN_ALLOW_DEV_WRITES=1`；环境变量可覆盖这些默认值。宿主会沿用旧客户端的 `X-User-Id`、`X-Client-Id` 请求头；此测试身份与登录时输入的用户名无关。开发和未签名测试配置均启用写入，并不代表登录用户的真实授权。其他部署须自行配置服务地址和认证参数。OAuth 模式需设置 `G1BRAIN_ACCESS_TOKEN` 与 `G1BRAIN_CLIENT_SECRET`（可选设置 `G1BRAIN_CLIENT_ID`）；宿主会发送 Basic 认证与 `Blade-Auth`。`G1BRAIN_TENANT_ID` 默认是 `000000`。没有对应认证参数时，插件仍启用但报告 `configured: false`，目录调用会明确报错。桌面 OAuth 登录通过私有宿主启动环境传递当前 token、经认证的用户 ID 和有效期，不向渲染进程传递凭据。独立运行的 OAuth 宿主上传静态图片时还须配置 G1BRAIN_USER_ID。桌面端只在首次登录时替换宿主；私有凭据管理方负责续期并同步访问凭据，不重启会话。刷新令牌被明确拒绝时返回登录页。详见[桌面端续期行为](../../../apps/desktop/README.zh.md#g1brain-branch-login)。
 
 工作台为新的顶层会话调用 `bindSession`。宿主校验所选目录就是该会话的工作区，并将完整目标保存于仅所有者可读写的私有绑定文件。限定范围工具只安装在对应智能体中；恢复智能体时重新读取绑定。工具执行时再次检查会话、目标、原始输入结构和目录范围。新增、修改、上传、文档处理任务提交/取消及追加式整包导入无需额外确认。删除和 `replace=true` 的整包导入须提供 `confirm=true`，并逐次取得 Harness 审批；此参数只表示删除意图，不代表用户已经批准。删除授权不共享、不复用。适用的非删除工具保留可选的旧版确认参数。上传仍须明确列出文件并逐一预检路径。旧版的 5 个智能体管理工具有意不开放。
 
@@ -56,6 +56,8 @@ kind: "package-reference"
 
 <a id="understand-the-package"></a>
 ## 理解此包
+
+`connectAuthentication` 连接唯一的宿主侧续期管理方，返回访问凭据更新及解绑回调，不是 Remote 方法。按修订号排序的访问凭据更新会同时同步目录和工具客户端，保持认证用户不变，且不包含刷新令牌。管理方销毁时须解绑，插件替换后须重新连接。没有管理方时，访问凭据被拒绝或过期会报错并发出原有过期通知。续期失败不会自动重发已经发出的写入。
 
 宿主插件负责服务凭据、资源目录、持久会话绑定和逐次授权。客户端页面调用其目录及绑定方法；普通会话只获得全局只读工具。
 

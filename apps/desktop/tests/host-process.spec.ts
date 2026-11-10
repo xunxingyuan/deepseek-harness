@@ -12,6 +12,16 @@ import { createServer } from 'node:http'
 import { writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 const server = createServer((request, response) => {
+  if (request.url === '/g1brain-current') {
+    response.setHeader('content-type', 'application/json')
+    response.end(JSON.stringify({ credential: currentCredential, pid: process.pid }))
+    return
+  }
+  if (request.url === '/g1brain-refresh') {
+    renewalResponse = response
+    process.send({ type: 'g1brain-auth-refresh', requestId: 42, rejectedAccessToken: 'old-access' })
+    return
+  }
   if (request.url === '/g1brain-expired') {
     process.send({ type: 'g1brain-auth-expired' })
     response.end('reported')
@@ -34,7 +44,16 @@ const server = createServer((request, response) => {
 server.listen(0, '127.0.0.1', () => {
   process.send({ type: 'ready', url: 'http://127.0.0.1:' + server.address().port + '/?token=fixture' })
 })
+let currentCredential
+let renewalResponse
 process.on('message', message => {
+  if (message.type === 'g1brain-auth-update') { currentCredential = message.credential; return }
+  if (message.type === 'g1brain-auth-refreshed') {
+    currentCredential = message.result.credential
+    renewalResponse.setHeader('content-type', 'application/json')
+    renewalResponse.end(JSON.stringify(message.result))
+    return
+  }
   if (message.type === 'update-tasks') {
     process.send({ type: 'update-tasks', requestId: message.requestId, active: message.action === 'lock' })
     return
@@ -78,6 +97,27 @@ afterEach(async () => {
 })
 
 describe('desktop host process', () => {
+  it('renews and pushes access credentials over private IPC without replacing the child', async () => {
+    const project = projectWithHost()
+    const refreshed = { accessToken: 'new-access', userId: 'user-1', revision: 2 }
+    const refresh = vi.fn(async () => ({ kind: 'updated' as const, credential: refreshed }))
+    const host = new DesktopHostProcess(process.execPath, project, project, undefined, process.env,
+      undefined, undefined, undefined, undefined, undefined, refresh)
+    hosts.push(host)
+    const ready = await host.start()
+    const before: unknown = await (await fetch(new URL('/g1brain-current', ready.url))).json()
+    expect(await (await fetch(new URL('/g1brain-refresh', ready.url))).json()).toEqual({ kind: 'updated', credential: refreshed })
+    expect(refresh).toHaveBeenCalledExactlyOnceWith('old-access')
+    host.updateG1brainAuthentication({ ...refreshed, accessToken: 'latest-access', revision: 3 })
+    let after: unknown
+    await vi.waitFor(async () => {
+      after = await (await fetch(new URL('/g1brain-current', ready.url))).json()
+      expect(after).toMatchObject({ credential: { accessToken: 'latest-access', revision: 3 } })
+    })
+    if (typeof before !== 'object' || !before || !('pid' in before)) throw new Error('Missing child PID')
+    expect(after).toMatchObject({ pid: before.pid })
+    await host.stop(true)
+  })
   it('reports G1brain authentication expiry over private child IPC', async () => {
     const project = projectWithHost()
     const expired = vi.fn()

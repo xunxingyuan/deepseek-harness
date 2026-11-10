@@ -1,0 +1,10 @@
+- insert:
+    - id: g1brain-renewal-fixture
+      name: './renewal-fixture.mjs'
+    - id: g1brain-auth-renewal
+      name: '@deepseek-ai/dsh-g1brain-integration'
+      config:
+        baseUrl: 'http://127.0.0.1:1'
+        clientId: 'g1brain-web'
+        tenantId: '000000'
+        timeoutMs: 1000

@@ -10,6 +10,29 @@ const configPath = fileURLToPath(new URL('./fixtures/workflow.patch.yml', import
 const tsconfigPath = fileURLToPath(new URL('../../../../tsconfig.json', import.meta.url))
 
 describe('G1brain prepared Session through the real Loader', () => {
+  it('continues the same durable Session after renewal without automatically replaying a write', async () => {
+    const result = await runLoaderSmoke({ label: 'G1brain renewal Session', tempDirPrefix: 'g1brain-renewal-workflow-',
+      binScript: driver, libBinScript: driver, configPath, tsconfigPath, env: { G1BRAIN_TEST_RENEWAL: '1' },
+      inspect: async (cwd) => {
+        const proof: unknown = JSON.parse(await readFile(join(cwd, 'backend-proof.json'), 'utf8'))
+        expect(proof).toEqual({ before: 16, after: 46, output: '认证已续期；核对未创建后继续完成本体和文档库。',
+          requests: ['write-rejected', 'private-renewal', 'verify-write-absent', 'collection:col_7c120e3057d72928f5491e86',
+            'domain:dom_e4d35bcec9eb3d594c4bdeb7', 'domain-display:周报领域', 'library:周报文档库',
+            'upload:中文 Word.docx.md', 'upload:中文 Excel.xlsx.md'],
+        })
+        const files = await readdir(join(cwd, '.sessions'), { recursive: true })
+        const logs = files.filter(file => /session\.v\d+\.jsonl$/.test(file))
+        expect(logs).toHaveLength(1)
+        const log = await readFile(join(cwd, '.sessions', logs[0]!), 'utf8')
+        for (const token of ['fixture-token', 'fixture-renewed-token', 'fixture-secret']) expect(log).not.toContain(token)
+        const events = log.trim().split('\n').slice(1).map(line => JSON.parse(line) as SessionEvent)
+        expect(events.filter(event => event.type === 'approval/asked')).toHaveLength(0)
+        expect(events.some(event => event.type === 'tool/result' && JSON.stringify(event.data).includes('当前请求未自动重发'))).toBe(true)
+      },
+    })
+    expect(result.stderr).not.toContain('UNHANDLED')
+  }, LOADER_SMOKE_TEST_TIMEOUT_MS)
+
   it('retains embedded pictures through the real tool runtime without logging credentials', async () => {
     const result = await runLoaderSmoke({ label: 'G1brain image Session', tempDirPrefix: 'g1brain-images-workflow-',
       binScript: driver, libBinScript: driver, configPath, tsconfigPath, env: { G1BRAIN_TEST_IMAGES: '1' },

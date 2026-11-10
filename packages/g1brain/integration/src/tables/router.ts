@@ -140,7 +140,7 @@ export class MaterialRouter {
    */
   async upload(paths: readonly string[], signal?: AbortSignal): Promise<unknown> {
     const plan = await this.plan(paths)
-    if (plan.artifacts.some(item => item.images.length > 0)) this.options.documents.requireImageAuthentication()
+    if (plan.artifacts.some(item => item.images.length > 0)) await this.options.documents.requireImageAuthentication()
     const table = plan.artifacts.some(item => item.kind === 'table') ? await this.collection(true, signal) : undefined
     const results: Array<Omit<ImportReceipt, 'result'> & { reused: boolean }> = []
     try {

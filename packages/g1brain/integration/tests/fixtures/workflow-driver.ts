@@ -21,6 +21,9 @@ const failures: string[] = []
 const tableMode = process.env.G1BRAIN_TEST_TABLES === '1'
 const sidMode = process.env.G1BRAIN_TEST_SID === '1'
 const imageMode = process.env.G1BRAIN_TEST_IMAGES === '1'
+const renewalMode = process.env.G1BRAIN_TEST_RENEWAL === '1'
+let currentAccess = 'fixture-token'
+let rejectWrite = renewalMode
 let pictureName: string | undefined
 const relationDefinitions = [{ kind: 'RELATION', sid: 'legacy.contains', displayName: '兼容包含' }]
 const tableCollections: Array<{ id: string; name: string; description: string }> = []
@@ -34,7 +37,8 @@ const server = createServer((request, response) => {
       response.end(fixturePng); return
     }
     if (imageMode && request.headers['blade-auth'] !== 'bearer fixture-token') throw new Error('G1brain login token missing')
-    if (!imageMode && !tableRequest && (request.headers['x-user-id'] !== 'developer' || request.headers['x-client-id'] !== 'g1brain-web')) {
+    if (renewalMode && request.headers['blade-auth'] !== `bearer ${currentAccess}`) throw new Error('Stale credential reached backend')
+    if (!imageMode && !renewalMode && !tableRequest && (request.headers['x-user-id'] !== 'developer' || request.headers['x-client-id'] !== 'g1brain-web')) {
       throw new Error('Development request identity missing')
     }
     if (tableRequest && request.headers['x-user-id']) throw new Error('G1brain identity leaked to the table service')
@@ -45,6 +49,12 @@ const server = createServer((request, response) => {
     }
     const bytes = Buffer.concat(chunks)
     const body = bytes.toString('utf8')
+    if (rejectWrite && request.method === 'POST' && url.pathname === '/kgApi/v1/gs/collections') {
+      rejectWrite = false
+      requests.push('write-rejected')
+      response.writeHead(401, { 'Content-Type': 'application/json' })
+      response.end('{}'); return
+    }
     if (tableRequest) {
       let result: unknown
       if (url.pathname === '/api/collections') {
@@ -87,7 +97,11 @@ const server = createServer((request, response) => {
     }
     let name: string | undefined
     let data: unknown
-    if (imageMode && url.pathname.endsWith('/res/searchByKeyword')) {
+    if (renewalMode && request.method === 'GET' && url.pathname === '/kgApi/v1/gs/collections') {
+      if (requests.includes('collection:col_7c120e3057d72928f5491e86')) throw new Error('Uncertain write was replayed automatically')
+      requests.push('verify-write-absent')
+      data = []
+    } else if (imageMode && url.pathname.endsWith('/res/searchByKeyword')) {
       data = { records: pictureName ? [{ name: pictureName, path: '/static/test.png' }] : [] }
     } else if (imageMode && request.method === 'POST' && url.pathname.endsWith('/res/upload')) {
       if (url.searchParams.get('userId') !== 'fixture-user') throw new Error('Wrong resource upload user')
@@ -175,7 +189,7 @@ try {
   process.env.G1BRAIN_ALLOW_DEV_WRITES = '1'
   process.env.G1BRAIN_LOCAL_USER_ID = 'developer'
   process.env.G1BRAIN_LOCAL_CLIENT_ID = 'g1brain-web'
-  if (imageMode) {
+  if (imageMode || renewalMode) {
     process.env.G1BRAIN_AUTH_MODE = 'oauth'
     process.env.G1BRAIN_CLIENT_SECRET = 'fixture-secret'
     process.env.G1BRAIN_ACCESS_TOKEN = 'fixture-token'
@@ -206,6 +220,12 @@ try {
   const { agent } = await ctx.agents.create({ sessionId: id, meta: { cwd: materials }, agentOptions: { provider: 'g1brain-workflow-fixture', model: 'fixture' } })
   const before = ctx.tools.schemas(agent).filter(tool => tool.name.startsWith('g1brain_')).length
   const service = ctx.get('g1brain') as G1brainIntegration
+  if (renewalMode) ctx.effect(() => service.connectAuthentication(async (rejectedAccess) => {
+    if (rejectedAccess !== 'fixture-token' || currentAccess !== 'fixture-token') throw new Error('Unexpected renewal request')
+    requests.push('private-renewal')
+    currentAccess = 'fixture-renewed-token'
+    return { kind: 'updated', credential: { accessToken: currentAccess, userId: 'fixture-user', revision: 2 } }
+  }).dispose)
   await service.bindSession({ sessionId: id, target: { mode: 'new-ontology', folderPath: materials,
     createOntologyCollectionName: '周报本体', createOntologyCollectionDisplayName: '周报本体',
     createDomainName: '周报领域', createDomainDisplayName: '周报领域', createDocumentLibraryName: '周报文档库' } })
