@@ -33,13 +33,25 @@ describe('G1brain prepared Session through the real Loader', () => {
     expect(result.stderr).not.toContain('UNHANDLED')
   }, LOADER_SMOKE_TEST_TIMEOUT_MS)
 
-  it('retains embedded pictures through the real tool runtime without logging credentials', async () => {
+  it.each([false, true])('retains embedded pictures through the real tool runtime without logging credentials (table routing: %s)', async (tableRouting) => {
     const result = await runLoaderSmoke({ label: 'G1brain image Session', tempDirPrefix: 'g1brain-images-workflow-',
-      binScript: driver, libBinScript: driver, configPath, tsconfigPath, env: { G1BRAIN_TEST_IMAGES: '1' },
+      binScript: driver, libBinScript: driver, configPath, tsconfigPath, env: {
+        G1BRAIN_TEST_IMAGES: '1', ...(tableRouting ? { G1BRAIN_TEST_TABLES: '1' } : {}),
+      },
       inspect: async (cwd) => {
         const proof: unknown = JSON.parse(await readFile(join(cwd, 'backend-proof.json'), 'utf8'))
-        expect(proof).toMatchObject({ before: 16, after: 46, output: '已保留 Word 图片并上传，文档中的图片使用静态资源永久链接。' })
-        expect(proof).toHaveProperty('requests', expect.arrayContaining(['static-picture-upload', 'upload:中文 图片.docx.md']))
+        expect(proof).toMatchObject({ before: 16, after: tableRouting ? 55 : 46, output: '已保留 Word 图片并上传，文档中的图片使用静态资源永久链接。' })
+        expect(proof).toHaveProperty('requests', expect.arrayContaining([
+          'picture-category:namespace', 'picture-category:project', 'static-picture-upload', 'upload:中文 图片.docx.md',
+        ]))
+        expect(proof).toHaveProperty('imageCategories', expect.arrayContaining([
+          { id: '11', parentId: '0', categoryName: '全部', categoryType: 'picture' },
+          { id: '100', parentId: '11', categoryName: 'G1brain X DeepSeek', categoryType: 'picture' },
+        ]))
+        expect(proof).toHaveProperty('imageCategories.length', 3)
+        expect(proof).toHaveProperty('imageCategories.2.id', '101')
+        expect(proof).toHaveProperty('imageCategories.2.parentId', '100')
+        expect(proof).toHaveProperty('imageCategories.2.categoryName', expect.stringMatching(/^周报领域 \[g1brain_/u))
         const files = await readdir(join(cwd, '.sessions'), { recursive: true })
         const file = files.find(file => /session\.v\d+\.jsonl$/.test(file))
         if (!file) throw new Error('Missing durable Session')
@@ -48,7 +60,18 @@ describe('G1brain prepared Session through the real Loader', () => {
         expect(log).not.toContain('fixture-secret')
         const events = log.trim().split('\n').slice(1).map(line => JSON.parse(line) as SessionEvent)
         expect(events.filter(event => event.type === 'approval/asked')).toHaveLength(0)
-        expect(events.some(event => event.type === 'tool/result' && JSON.stringify(event.data).includes('imageCount'))).toBe(true)
+        const uploads = new Set(events.flatMap(event => event.type === 'tool/call' && event.data.name === 'g1brain_upload_selected_files'
+          ? [event.data.callId] : []))
+        const outcomes = events.flatMap(event => event.type === 'tool/result' && uploads.has(event.data.message.toolCallId)
+          ? event.data.message.content.flatMap(block => block.type === 'text' ? [block.text] : []) : [])
+        expect(outcomes).toHaveLength(1)
+        const serialized = outcomes[0]
+        if (!serialized) throw new Error('Image upload receipt missing')
+        const receipt: unknown = JSON.parse(serialized)
+        expect(receipt).toMatchObject(tableRouting
+          ? { status: 'accepted', documentUploads: 1, tableUploads: 0,
+            results: [{ kind: 'document', collectionId: '周报文档库', reused: false }] }
+          : { uploaded: 1, results: [{ result: { imageCount: 1 } }] })
       },
     })
     expect(result.stderr).not.toContain('UNHANDLED')

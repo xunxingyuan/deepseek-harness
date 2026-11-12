@@ -6,6 +6,7 @@ import { extractMaterialDocument } from '../legacy/bridge/material.ts'
 import type { MaterialImage } from '../legacy/bridge/images.ts'
 import type { G1BrainClient } from '../legacy/g1brain/client.ts'
 import { G1BrainError } from '../legacy/errors.ts'
+import { resourceImageProject } from '../legacy/g1brain/resource-categories.ts'
 import type { G1brainSessionTarget } from '../types.ts'
 import { TableApiError, TableClient, type TableCollection } from './client.ts'
 import { planExcel, type SheetDecision } from './excel.ts'
@@ -164,7 +165,9 @@ export class MaterialRouter {
             const library = this.options.target.documentLibraryName ?? this.options.target.createDocumentLibraryName
             if (!library) throw new Error('未绑定向量文档库')
             const result = await this.options.documents.uploadMdMaterial(library, artifact.uploadName,
-              { markdown: artifact.bytes.toString('utf8'), images: artifact.images }, signal)
+              { markdown: artifact.bytes.toString('utf8'), images: artifact.images }, signal,
+              artifact.images.length ? resourceImageProject({ ...this.options.target, instruction: '' }, library,
+                await this.options.domainDisplayName()) : undefined)
             receipt = { ...artifact, collectionId: library, jobIds: [], result }
           }
         } catch (error) {

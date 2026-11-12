@@ -58,7 +58,7 @@ const WORKFLOW_GUIDANCE = [
   'Before writing in a prepared Session, call g1brain_context and use its bound collection and domain API names for creation and all later references. Display names are labels only; never translate or regenerate bound identifiers. System domains such as _schema and _shared are not business write targets.',
   'New class, instance, property, and relation-type SIDs must start with an ASCII letter and contain only ASCII letters, digits, or underscores, for example Instrument or belongs_to_unit. Do not prefix a SID with the collection or domain, and do not use dots, hyphens, spaces, or Chinese characters. Put human-readable names in displayName. Preserve existing SIDs exactly when querying, updating, or referencing them. To create an edge, pass the exact SID from the effective relation definitions, not a display name; the tool resolves the Web-compatible edge label and refuses ambiguous names or labels containing dots.',
   'Use g1brain_read_selected_file to extract DOCX or Excel text and tables, not a raw text read of Office bytes. Document uploads extract UTF-8 Markdown before ingestion. Unsupported or encrypted files must be converted first; never upload garbled text as a successful extraction. Document uploads and processing tasks use the document library API name from the Session context, not the ontology collection name or a display name.',
-  'Document uploads preserve embedded DOCX/XLSX pictures and relative Markdown image references through G1brain static resources. Use the upload tool rather than manually copying opaque image placeholders from file-read results. Images require a genuine G1brain login token, not the development identity. The tool uploads and verifies public static image URLs before submitting Markdown, never puts login tokens in image URLs, and stops on missing images or authentication expiry. Pictures are not OCR results. Legacy XLS pictures must first be saved as XLSX; image-bearing Excel sources need a vector document library even when their data sheets also route to tables.',
+  'Document uploads preserve embedded DOCX/XLSX pictures and relative Markdown image references through G1brain static resources. Use the upload tool rather than manually copying opaque image placeholders from file-read results. Images require a genuine G1brain login token, not the development identity. The tool uploads and verifies public static image URLs before submitting Markdown, never puts login tokens in image URLs, and stops on missing images or authentication expiry. Pictures are grouped automatically under the dedicated client category and the bound collection/domain project; do not choose category IDs. Existing pictures are not moved or deleted. Pictures are not OCR results. Legacy XLS pictures must first be saved as XLSX; image-bearing Excel sources need a vector document library even when their data sheets also route to tables.',
   'When g1brain_inspect_materials is available, inspect selected sources before importing. The upload tool routes regular Excel worksheets to the domain-bound table collection and explanatory sheets to the selected vector document library. Mixed workbooks are split by worksheet without changing the original. Only document uploads need MD/CHUNK tasks; table uploads return job IDs and require g1brain_get_table_imports to report completed. partial, failed, needs_input, and missing jobs are not success. Do not repeat an uncertain write. For table answers use g1brain_list_data_tables, g1brain_describe_data_table, and read-only SQL through g1brain_query_data_tables, not vector search arithmetic. Do not discard columns or invent missing header meanings. Same collection names alone do not authorize reusing another ontology domain’s table collection.',
   'In a prepared Session, inspect the sources and cite evidence. Execute requested creation, updates, uploads, and document processing within the bound resources without asking for extra confirmation. A request only for information or a plan is not a request to write data. Ask clarification questions only when the intended scope or business requirement is ambiguous.',
   'Deletion and replacement imports that may remove existing content require approval for each call. Set confirm=true for those calls and let Harness request approval; do not ask for a separate chat confirmation. Missing or rejected approval must prevent the deletion.',
@@ -80,8 +80,10 @@ export interface Config {
   readonly tableTimeoutMs: number
   /** Maximum generated XLSX bytes accepted by the table service. */
   readonly tableMaxUploadBytes: number
-  /** Picture-management category ID, using the existing application's picture root by default. */
+  /** Parent picture category under which the dedicated client namespace is created; never a direct upload target. */
   readonly resourceCategoryId: string
+  /** Dedicated first-level picture category shared by this deployment's projects. */
+  readonly resourceNamespaceName: string
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -132,6 +134,7 @@ export default class G1brainIntegration extends TypertRemoteService {
     tableTimeoutMs: z.natural().min(1).default(120000),
     tableMaxUploadBytes: z.natural().min(1).default(25 * 1024 * 1024),
     resourceCategoryId: z.string().default('11'),
+    resourceNamespaceName: z.string().default('G1brain X DeepSeek'),
   })
 
   private readonly endpoint: URL | undefined
@@ -185,6 +188,7 @@ export default class G1brainIntegration extends TypertRemoteService {
       localUserId: env.G1BRAIN_LOCAL_USER_ID?.trim() ?? '',
       localClientId: env.G1BRAIN_LOCAL_CLIENT_ID?.trim() ?? '',
       resourceCategoryId: config.resourceCategoryId,
+      resourceNamespaceName: config.resourceNamespaceName,
       onAuthExpired: () =>{  this.expireAuthentication() },
       renewAuthentication: token => this.renewAuthentication(token),
     })
@@ -297,13 +301,14 @@ export default class G1brainIntegration extends TypertRemoteService {
     const task: PreparedTask = { ...target, instruction: '' }
     const collectionName = target.ontologyCollectionName ?? target.createOntologyCollectionName ?? ''
     const domainName = target.domainName ?? target.createDomainName ?? ''
+    const domainDisplayName = async () => target.createDomainDisplayName
+      ?? (await this.listOntologyDomains(collectionName)).find(item => item.name === domainName)?.displayName ?? domainName
     const router = this.tables === undefined ? undefined : new MaterialRouter({ scope, target, documents: this.client, tables: this.tables,
       store: new TableStore(join(resolveDshHome(), 'g1brain', 'tables'), JSON.stringify({ g1brainUrl: this.endpoint?.href,
         tenantId: this.config.tenantId, collectionName, domainName, tableUrl: this.tables.baseUrl })),
-      domainDisplayName: async () => target.createDomainDisplayName
-        ?? (await this.listOntologyDomains(collectionName)).find(item => item.name === domainName)?.displayName ?? domainName,
+      domainDisplayName,
     })
-    const legacy = createG1BrainTools({ client: this.client, scope, task,
+    const legacy = createG1BrainTools({ client: this.client, scope, task, imageProjectDisplayName: domainDisplayName,
       ...(router ? { uploadMaterials: (paths: readonly string[], signal?: AbortSignal) => router.upload(paths, signal) } : {}) })
     const prepared = [...legacy, ...(router ? createTableTools(router) : [])]
       .filter(tool => !AGENT_MANAGEMENT_TOOLS.has(tool.name))

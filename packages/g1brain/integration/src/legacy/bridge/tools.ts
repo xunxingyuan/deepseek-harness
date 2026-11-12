@@ -4,6 +4,7 @@ import { ScopeError } from '../errors.ts'
 import type { DocumentTaskSubmission, PreparedTask, ToolResult } from '../types.ts'
 import type { WorkspaceScope } from './scope.ts'
 import { NEW_SID_DESCRIPTION, NEW_SID_PATTERN, requireNewSid, requireResourceName, resourceName } from '../../names.ts'
+import { resourceImageProject } from '../g1brain/resource-categories.ts'
 
 /** Model-facing legacy G1brain operation before Harness registration. */
 export interface ToolDefinition {
@@ -19,6 +20,7 @@ export interface BridgeContext {
   scope?: WorkspaceScope
   task?: PreparedTask
   uploadMaterials?: (paths: readonly string[], signal?: AbortSignal) => Promise<unknown>
+  imageProjectDisplayName?: () => Promise<string>
 }
 
 const documentCollection = {
@@ -245,10 +247,12 @@ export function createG1BrainTools(context: BridgeContext): ToolDefinition[] {
           const collectionName = requiredString(args, 'collectionName')
           const selected = await scope().prepareUploads(requested)
           if (selected.some(file => file.images.length > 0)) await client.requireImageAuthentication()
+          const project = selected.some(file => file.images.length > 0)
+            ? resourceImageProject(context.task, collectionName, await context.imageProjectDisplayName?.()) : undefined
           const results: Array<{ path: string; uploadName: string; result: unknown }> = []
           for (const file of selected) {
             const result = await client.uploadMdMaterial(collectionName, file.uploadName,
-              { markdown: file.contents, images: file.images }, signal)
+              { markdown: file.contents, images: file.images }, signal, project)
             results.push({ path: file.path, uploadName: file.uploadName, result })
           }
           return text({ uploaded: results.length, results })

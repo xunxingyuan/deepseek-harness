@@ -3,8 +3,8 @@
 # After editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write docs/upgrade-guide/v0.2.1-alpha.1/g1brain-document-images/guide.md
 /:
-  en: 94833807b6b062e2
-  zh: 39e63aa6c02f1fc8
+  en: c9f29130b3b2f620
+  zh: bd936dd0517cb31b
 /g1brain-document-pictures-and-login-expiry:
   en: 9dbc32d1cf4af5b0
   zh: ab204c21aa824d9d
@@ -12,5 +12,5 @@
   en: 0b7b6acfd64698b2
   zh: 16bb6eed37ddc712
 /g1brain-document-pictures-and-login-expiry/migration:
-  en: 4a5f486290710941
-  zh: c753dbb869c34621
+  en: b2aaca1e7c286aa1
+  zh: a785d84e38b6f647

@@ -1,6 +1,6 @@
 ---
 kind: upgrade-guide
-description: G1brain document uploads retain pictures and require genuine OAuth credentials instead of silently dropping images.
+description: G1brain document uploads preserve pictures in project categories and require genuine OAuth credentials.
 ---
 
 # G1brain document pictures and login expiry
@@ -16,7 +16,7 @@ Desktop OAuth sign-in replaces the Host with the current process-local credentia
 ## Migration
 
 1. In Desktop Welcome's Connection settings, configure the service addresses, client ID and client secret, then sign in with G1brain. Saving a secret enables OAuth. Blank keeps the configured secret; it is OS-encrypted and never echoed. Legacy URL-only preferences remain readable; copying encrypted preferences to another device/account may require reconfiguration. Secrets are not embedded in installers. External deployments can still use OAuth environment configuration; a standalone Host also needs `G1BRAIN_USER_ID` for pictures.
-2. Configure the integration's `resourceCategoryId` if its picture category differs from the existing root `11`. The resource service must return permanent, anonymously readable same-origin paths; tokens are never added to image URLs. Use only material approved for that server's static-access policy.
+2. `resourceCategoryId` now selects the picture parent (default `11`), not a direct upload destination. `resourceNamespaceName` defaults to `G1brain X DeepSeek`; project children are resolved below it. Grant category-list/create permissions and preserve project-name identity suffixes during manual renames. Confirm new pictures appear in the project child. Existing pictures and links remain unchanged. The service must still return permanent, anonymously readable same-origin paths without tokens; upload only approved material.
 3. Save picture-bearing XLS files as XLSX. Convert unsupported image formats to PNG/JPEG/GIF/WebP/BMP; use standard Markdown image syntax for local references. Select a vector library for picture notes even if Excel data routes to tables.
 4. Re-import original sources when repairing older image-free documents, and check for existing document records before retrying. Image-aware imports do not reuse old text-only receipts; accepted pictures can remain after a later document failure and are never deleted automatically.
 5. Restart the updated Desktop and sign in again to obtain an in-memory refresh token; saved connection preferences remain. Desktop and its bundled Host must be rebuilt together for private Host protocol 5. Confirm catalog queries continue after renewal without reopening the workspace. A standalone Host without a private credential owner still requires a valid configured access token.

@@ -1314,8 +1314,10 @@ export interface Config {
   readonly tableTimeoutMs: number
   /** Maximum generated XLSX bytes accepted by the table service. */
   readonly tableMaxUploadBytes: number
-  /** Picture-management category ID, using the existing application's picture root by default. */
+  /** Parent picture category under which the dedicated client namespace is created; never a direct upload target. */
   readonly resourceCategoryId: string
+  /** Dedicated first-level picture category shared by this deployment's projects. */
+  readonly resourceNamespaceName: string
 }
 ```
 <!-- END GENERATED config-catalog:@deepseek-ai/dsh-g1brain-integration -->

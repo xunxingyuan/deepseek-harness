@@ -9,12 +9,14 @@ import type {
   LoginInput,
   OntologyCollection,
   OntologyDomain,
+  ResourceImageProject,
 } from '../types.ts'
 import { G1BrainError } from '../errors.ts'
 import { encryptG1Password } from './crypto.ts'
 import { requireNewSid, requireRelationLabel, requireResourceName } from '../../names.ts'
 import { uploadedMarkdown, type MaterialDocument } from '../bridge/images.ts'
 import { uploadResourceImage } from './resource-images.ts'
+import { ResourceCategories } from './resource-categories.ts'
 
 type FetchLike = typeof fetch
 
@@ -89,11 +91,15 @@ class G1BrainClientImpl {
   private tokens: AuthTokens | undefined
   private refreshInFlight: Promise<AuthTokens> | undefined
   private readonly imageIntents = new Set<string>()
+  private readonly imageCategories: ResourceCategories
   private authenticationExpired = false
 
   constructor(config: G1BrainConfig, fetchImpl: FetchLike = fetch) {
     this.config = config
     this.fetchImpl = fetchImpl
+    this.imageCategories = new ResourceCategories({ baseUrl: config.baseUrl, tenantId: config.tenantId,
+      parentId: config.resourceCategoryId?.trim() || '11', namespaceName: config.resourceNamespaceName ?? 'G1brain X DeepSeek',
+      request: (path, init) => this.request(path, init) })
   }
 
   get baseUrl(): string {
@@ -145,14 +151,18 @@ class G1BrainClientImpl {
    * @param fileName - preflighted Markdown upload name.
    * @param document - extracted text and images, never original Office bytes.
    * @param signal - caller cancellation.
+   * @param project - bound ontology project; standalone callers use their document library.
    * @returns the document receipt and image count; image failures never submit Markdown.
    */
-  async uploadMdMaterial(collectionName: string, fileName: string, document: MaterialDocument, signal?: AbortSignal): Promise<unknown> {
+  async uploadMdMaterial(collectionName: string, fileName: string, document: MaterialDocument, signal?: AbortSignal,
+    project?: ResourceImageProject): Promise<unknown> {
     if (document.images.length === 0) return this.uploadMdFile(collectionName, fileName, document.markdown, signal)
     await this.requireImageAuthentication()
     const userId = this.tokens?.userId
     if (!userId) throw new G1BrainError('G1brain 登录用户 ID 不可用')
-    const categoryId = this.config.resourceCategoryId?.trim() || '11'
+    const categoryId = await this.imageCategories.project(project ?? {
+      kind: 'document-library', collectionName, displayName: collectionName,
+    }, userId, signal)
     const urls = new Map<string, string>()
     for (const image of document.images) {
       signal?.throwIfAborted()

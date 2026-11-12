@@ -13,14 +13,19 @@ import { createG1BrainTools } from '../src/legacy/bridge/tools.ts'
 import { planExcel } from '../src/tables/excel.ts'
 import { fixturePng, imageDocx, imageWorkbook } from './fixtures/materials.ts'
 import { tableWorkbook } from './fixtures/table-workbooks.ts'
+import { pictureCategories } from './fixtures/picture-categories.ts'
 
 const roots: string[] = []
 afterEach(async () => { await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true }))) })
 const limit = 1_000_000
 const image = materialImage(fixturePng)
 
-function backend() {
-  let uploaded = false
+function requestUrl(input: string | URL | Request): URL { return new URL(input instanceof Request ? input.url : input) }
+
+function backend(failure?: 'public-401' | 'wrong-bytes' | 'cross-origin') {
+  const uploaded = new Set<string>()
+  const uploadCategories: string[] = []
+  const categories = pictureCategories()
   const documents: string[] = []
   const expires = vi.fn()
   const fetcher = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
@@ -29,19 +34,27 @@ function backend() {
     if (url.pathname === '/static/test.png') {
       expect(headers.has('Blade-Auth')).toBe(false)
       expect(headers.has('Authorization')).toBe(false)
-      return new Response(Uint8Array.from(fixturePng), { headers: { 'Content-Type': 'image/png' } })
+      if (failure === 'public-401') return new Response('', { status: 401 })
+      return new Response(failure === 'wrong-bytes' ? 'wrong-image-bytes' : Uint8Array.from(fixturePng), { headers: { 'Content-Type': 'image/png' } })
     }
     expect(headers.get('Blade-Auth')).toBe('bearer fixture-token')
-    if (url.pathname.endsWith('/searchByKeyword')) return Response.json({ data: { records: uploaded ? [{ name: `g1brain-${image.key}.png`, path: '/static/test.png' }] : [] } })
+    const category = categories.response(url, init?.method)
+    if (category !== undefined) return Response.json({ data: category })
+    if (url.pathname.endsWith('/searchByKeyword')) return Response.json({ data: { records: uploaded.has(url.searchParams.get('id') ?? '') || failure !== undefined ? [{ name: `g1brain-${image.key}.png`,
+      path: failure === 'cross-origin' ? '//other.invalid/image.png' : '/static/test.png' }] : [] } })
     if (url.pathname.endsWith('/res/upload')) {
       expect(url.searchParams.get('userId')).toBe('user-123')
       if (!(init?.body instanceof FormData)) throw new Error('Expected image form')
-      expect(init.body.get('id')).toBe('11')
+      const categoryId = init.body.get('id')
+      if (typeof categoryId !== 'string') throw new Error('Project category missing')
+      expect(categories.nodes.find(node => node.id === categoryId)?.parentId).toBe('100')
+      expect(categoryId).not.toBe('11')
       expect(init.body.get('fileType')).toBe('picture')
       const file = init.body.get('files')
       if (!(file instanceof File)) throw new Error('Expected static image file')
       expect(Buffer.from(await file.arrayBuffer())).toEqual(fixturePng)
-      uploaded = true
+      uploaded.add(categoryId)
+      uploadCategories.push(categoryId)
       return Response.json({ code: 200, data: true })
     }
     if (url.pathname.endsWith('/mds')) {
@@ -56,7 +69,7 @@ function backend() {
   const client = createG1BrainClient({ baseUrl: 'http://localhost', authMode: 'oauth', clientId: 'fixture', clientSecret: 'fixture-secret',
     tenantId: '000000', publicKey: '', timeoutMs: 1000, localUserId: '', localClientId: '', onAuthExpired: expires }, fetcher)
   client.setTokens({ accessToken: 'fixture-token', tenantId: '000000', userId: 'user-123', issuedAt: Date.now() })
-  return { client, fetcher, documents, expires }
+  return { client, fetcher, documents, expires, categories, uploadCategories }
 }
 
 describe('G1brain image-preserving document ingestion', () => {
@@ -174,24 +187,44 @@ describe('G1brain image-preserving document ingestion', () => {
 
   it('does not submit Markdown after an image upload fails, or retry an uncertain image POST', async () => {
     const { client, fetcher, documents } = backend()
-    fetcher.mockImplementation(async (_url, init) => init?.method === 'POST' ? Response.json({ code: 500 }, { status: 500 }) : Response.json({ data: { records: [] } }))
+    const original = fetcher.getMockImplementation()!
+    fetcher.mockImplementation(async (url, init) => requestUrl(url).pathname.endsWith('/res/upload')
+      ? Response.json({ code: 500 }, { status: 500 }) : original(url, init))
     const document = { markdown: `![](${image.placeholder})`, images: [image] }
     await expect(client.uploadMdMaterial('library', 'doc.md', document)).rejects.toThrow()
     await expect(client.uploadMdMaterial('library', 'doc.md', document)).rejects.toThrow('结果不确定')
-    expect(fetcher.mock.calls.filter(([, init]) => init?.method === 'POST')).toHaveLength(1)
+    expect(fetcher.mock.calls.filter(([url, init]) => requestUrl(url).pathname.endsWith('/res/upload') && init?.method === 'POST')).toHaveLength(1)
     expect(documents).toEqual([])
   })
 
+  it('deduplicates pictures inside a project rather than reusing another project\'s category record', async () => {
+    const { client, uploadCategories, categories } = backend()
+    const document = { markdown: `![](${image.placeholder})`, images: [image] }
+    const project = { kind: 'ontology' as const, collectionName: 'collection', domainName: 'first', displayName: '同名项目' }
+    await client.uploadMdMaterial('library', 'a.md', document, undefined, project)
+    await client.uploadMdMaterial('library', 'b.md', document, undefined, { ...project, domainName: 'second' })
+    await client.uploadMdMaterial('library', 'c.md', document, undefined, project)
+    expect(uploadCategories).toEqual(['101', '102'])
+    expect(categories.nodes.filter(node => node.parentId === '100')).toHaveLength(2)
+  })
+
+  it('does not upload images or Markdown if the project category cannot be created', async () => {
+    const { client, fetcher, documents } = backend()
+    const original = fetcher.getMockImplementation()!
+    fetcher.mockImplementation(async (url, init) => requestUrl(url).pathname.endsWith('/category/add')
+      ? Response.json({ code: 403 }, { status: 403 }) : original(url, init))
+    await expect(client.uploadMdMaterial('library', 'doc.md', { markdown: `![](${image.placeholder})`, images: [image] })).rejects.toThrow()
+    expect(documents).toEqual([])
+    expect(fetcher.mock.calls.some(([url]) => requestUrl(url).pathname.endsWith('/res/upload'))).toBe(false)
+  })
+
   it.each(['public-401', 'wrong-bytes', 'cross-origin'] as const)('rejects unusable static images without expiring valid login: %s', async (failure) => {
-    const { client, fetcher, expires, documents } = backend()
-    fetcher.mockResolvedValueOnce(Response.json({ data: { records: [{ name: `g1brain-${image.key}.png`,
-      path: failure === 'cross-origin' ? '//other.invalid/image.png' : '/static/test.png' }] } }))
-      .mockResolvedValueOnce(failure === 'public-401' ? new Response('', { status: 401 }) : new Response('wrong-image-bytes'))
+    const { client, fetcher, expires, documents } = backend(failure)
     await expect(client.uploadMdMaterial('library', 'doc.md', { markdown: `![](${image.placeholder})`, images: [image] })).rejects.toThrow()
     expect(expires).not.toHaveBeenCalled()
     expect(client.authState).toBeDefined()
     expect(documents).toEqual([])
-    expect(fetcher).toHaveBeenCalledTimes(failure === 'cross-origin' ? 1 : 2)
+    expect(fetcher.mock.calls.filter(([url]) => requestUrl(url).pathname === '/static/test.png')).toHaveLength(failure === 'cross-origin' ? 0 : 1)
   })
 
   it.each([401, '401'])('clears authentication and notifies once on business rejection %s', async (code) => {

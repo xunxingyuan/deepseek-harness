@@ -11,6 +11,7 @@ import type G1brainIntegration from '@deepseek-ai/dsh-g1brain-integration'
 import { bootProductionProfile } from '../../../../test-support/loader-smoke/tests/fixtures/production-profile.ts'
 import { chineseDocx, chineseWorkbook, fixturePng, imageDocx } from './materials.ts'
 import { tableWorkbook, workbookCell } from './table-workbooks.ts'
+import { pictureCategories } from './picture-categories.ts'
 import { Buffer } from 'node:buffer'
 import * as XLSX from 'xlsx'
 
@@ -25,6 +26,7 @@ const renewalMode = process.env.G1BRAIN_TEST_RENEWAL === '1'
 let currentAccess = 'fixture-token'
 let rejectWrite = renewalMode
 let pictureName: string | undefined
+const imageCategories = pictureCategories('fixture-user')
 const relationDefinitions = [{ kind: 'RELATION', sid: 'legacy.contains', displayName: '兼容包含' }]
 const tableCollections: Array<{ id: string; name: string; description: string }> = []
 const server = createServer((request, response) => {
@@ -97,7 +99,11 @@ const server = createServer((request, response) => {
     }
     let name: string | undefined
     let data: unknown
-    if (renewalMode && request.method === 'GET' && url.pathname === '/kgApi/v1/gs/collections') {
+    const category = imageMode ? imageCategories.response(url, request.method) : undefined
+    if (category !== undefined) {
+      if (request.method === 'POST') requests.push(url.searchParams.get('parentId') === '11' ? 'picture-category:namespace' : 'picture-category:project')
+      data = category
+    } else if (renewalMode && request.method === 'GET' && url.pathname === '/kgApi/v1/gs/collections') {
       if (requests.includes('collection:col_7c120e3057d72928f5491e86')) throw new Error('Uncertain write was replayed automatically')
       requests.push('verify-write-absent')
       data = []
@@ -107,7 +113,7 @@ const server = createServer((request, response) => {
       if (url.searchParams.get('userId') !== 'fixture-user') throw new Error('Wrong resource upload user')
       const form = await new Response(bytes, { headers: { 'Content-Type': request.headers['content-type'] ?? '' } }).formData()
       const file = form.get('files')
-      if (!(file instanceof File) || form.get('id') !== '11' || form.get('fileType') !== 'picture'
+      if (!(file instanceof File) || form.get('id') !== '101' || form.get('fileType') !== 'picture'
         || !Buffer.from(await file.arrayBuffer()).equals(fixturePng)) throw new Error('Embedded image was not preserved')
       pictureName = file.name
       requests.push('static-picture-upload')
@@ -232,7 +238,8 @@ try {
   const after = ctx.tools.schemas(agent).filter(tool => tool.name.startsWith('g1brain_')).length
   const result = await runFixtureTurn(ctx, { task: '请读取第一张表并创建col_7c120e3057d72928f5491e86、领域和文档库，随后申请删除废弃属性，用中文回复。' })
   if (failures.length) throw new Error(failures.join('; '))
-  await writeFile(join(process.cwd(), 'backend-proof.json'), JSON.stringify({ requests, before, after, output: result.output }))
+  await writeFile(join(process.cwd(), 'backend-proof.json'), JSON.stringify({ requests, before, after, output: result.output,
+    ...(imageMode ? { imageCategories: imageCategories.nodes } : {}) }))
   process.stdout.write(JSON.stringify({ type: 'g1brain-workflow-result', before, after, output: result.output }) + '\n')
 } finally {
   try { await ctx?.fiber.dispose() } finally {

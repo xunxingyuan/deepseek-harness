@@ -15,9 +15,22 @@ export interface G1BrainConfig {
   localUserId: string
   localClientId: string
   resourceCategoryId?: string
+  resourceNamespaceName?: string
   onAuthExpired?: () => void
   /** Renew through the current Host owner; false means the login is definitively unavailable. */
   renewAuthentication?: (rejectedAccessToken?: string) => Promise<boolean>
+}
+
+/** Stable business scope for static pictures; display names never determine project identity. */
+export type ResourceImageProject = {
+  readonly kind: 'ontology'
+  readonly collectionName: string
+  readonly domainName: string
+  readonly displayName: string
+} | {
+  readonly kind: 'document-library'
+  readonly collectionName: string
+  readonly displayName: string
 }
 
 /** OAuth token and associated tenant identity. */
